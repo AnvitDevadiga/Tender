@@ -66,7 +66,7 @@ def test_file_search_git_and_dependency_tools_are_bounded(tmp_path) -> None:
     try:
         assert "return 1" in agent_tools.execute("read_file", '{"path":"app.py"}').content
         assert agent_tools.execute("list_directory", '{"path":"."}').ok is True
-        assert agent_tools.execute("list_directory", '{}').ok is True
+        assert agent_tools.execute("list_directory", "{}").ok is True
         assert agent_tools.execute("list_directory", '{"path":".","depth":2,"limit":20}').ok is True
         assert agent_tools.execute("list_directory", '{"path":"","depth":2}').ok is False
         assert (
