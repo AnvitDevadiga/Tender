@@ -40,21 +40,22 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 - Plan approval, GitHub PR creation, and role-based approval identity/permissions.
 - PostgreSQL/migrations, workflow checkpoint resume, cancellation, and public-run authentication/quotas.
 - Repeated, measured AI benchmark results. Existing fixture/test results are engineering checks, not model success metrics.
-- The project is connected to the supplied public GitHub repository. The initial source commit is pushed to `main`; the static demo deployment is in progress.
+- The project is connected to the supplied public GitHub repository. Source is pushed to `main`; the read-only static demo is live at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/).
 
 ## Verification
 
 - `python3 -m pytest -q`: 97 passed, with one Starlette/httpx deprecation warning.
 - `python3 -m compileall -q src tests`: passed.
-- Ruff is not installed in the current environment; lint and format checks are not verified in this audit.
+- GitHub Actions CI passed on commit `f33c007`, including Ruff lint/format, compilation, all 97 tests, and benchmark validation.
 - Benchmark manifest validation: three pinned task definitions accepted.
 - `python scripts/prepare_fixtures.py` creates the same pinned baseline from a clean clone; the pin test and manifest validation pass locally.
 - Docker images built; the API and worker containers are running, and `GET /health` returned HTTP 200. A network-disabled sandbox smoke test succeeded.
+- GitHub Pages deployment workflow succeeded; the published page returned HTTP 200 and contained the expected read-only demo notice.
 - A real Groq-backed task on the pinned fixture reached planning and repository search/read, but Groq returned HTTP 429 before code generation. No patch was applied. Cost is unknown; this is not a successful benchmark result. See [provider trial record](PROVIDER_TRIALS.md).
 - The checked-in fixture ablation remains a development artifact with no successful measured trials and must not be used for performance claims.
 
 ## Demo and cost
 
-The portfolio page in `demo/index.html` is read-only and does not run submitted code. It can be published through GitHub Pages at no hosting cost for a public repository on GitHub Free. Publishing requires restoring this checkout's Git link to the supplied repository, pushing changes, and selecting GitHub Actions as the Pages source in repository settings.
+The portfolio page in `demo/index.html` is read-only and does not run submitted code. It is published through GitHub Pages at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/) at no hosting cost for this public repository. Final project naming and website design remain with the user.
 
 Local tests and manifest checks need no API key. A real model call needs a provider key and is subject to that provider's current limits and billing terms. Public interactive code execution is intentionally not available until authentication, quotas, worker separation, persistence, and stronger isolation are built and tested.
