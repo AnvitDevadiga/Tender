@@ -59,6 +59,7 @@ The API persists run requests to a SQLite-backed queue and returns immediately. 
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+python scripts/prepare_fixtures.py
 uvicorn forgebench.api:app --reload
 pytest
 ```
@@ -69,7 +70,7 @@ Copy [`.env.example`](.env.example) to `.env`, edit the local values, then expor
 
 ## Free static portfolio demo
 
-The demo is a read-only static page; it does not expose the API or execute submitted code. To publish it on GitHub Pages, push the changes to the repository's `main` branch, then open **Settings → Pages** and set the publishing source to **GitHub Actions**. The [`Deploy portfolio demo` workflow](.github/workflows/deploy-demo.yml) publishes the page on subsequent changes under `demo/`. GitHub Pages is available for public repositories on GitHub Free; see [GitHub's Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+The read-only page is live at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/). It does not expose the API or execute submitted code. The [`Deploy portfolio demo` workflow](.github/workflows/deploy-demo.yml) republishes it when `demo/` changes. GitHub Pages is available for public repositories on GitHub Free; see [GitHub's Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
 
 Or run the API with Docker Compose:
 

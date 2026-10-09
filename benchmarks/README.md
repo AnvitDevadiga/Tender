@@ -6,9 +6,15 @@ It contains:
 
 - `fixtures/forgecalc`: a small MIT-licensed Git repository;
 - `tasks.jsonl`: three issue records with evaluator commands;
-- pinned commit fields, replaced after the fixture repository is committed.
+- a deterministic pinned baseline commit, reproducible from the tracked fixture files by `python scripts/prepare_fixtures.py`.
 
 The fixture tests are expected to fail at the pinned base commit. They are the evaluator signal the agent must repair; do not run them as part of ForgeBench's own unit-test suite.
+
+Prepare the fixture Git repository after a fresh clone (CI does this automatically):
+
+```bash
+python scripts/prepare_fixtures.py
+```
 
 Run its tests:
 

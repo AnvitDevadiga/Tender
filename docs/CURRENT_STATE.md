@@ -40,7 +40,7 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 - Plan approval, GitHub PR creation, and role-based approval identity/permissions.
 - PostgreSQL/migrations, workflow checkpoint resume, cancellation, and public-run authentication/quotas.
 - Repeated, measured AI benchmark results. Existing fixture/test results are engineering checks, not model success metrics.
-- This checkout currently has no `.git` metadata, so its changes cannot yet be compared with or pushed to the supplied GitHub repository from here.
+- The project is connected to the supplied public GitHub repository. The initial source commit is pushed to `main`; the static demo deployment is in progress.
 
 ## Verification
 
@@ -48,6 +48,7 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 - `python3 -m compileall -q src tests`: passed.
 - Ruff is not installed in the current environment; lint and format checks are not verified in this audit.
 - Benchmark manifest validation: three pinned task definitions accepted.
+- `python scripts/prepare_fixtures.py` creates the same pinned baseline from a clean clone; the pin test and manifest validation pass locally.
 - Docker images built; the API and worker containers are running, and `GET /health` returned HTTP 200. A network-disabled sandbox smoke test succeeded.
 - A real Groq-backed task on the pinned fixture reached planning and repository search/read, but Groq returned HTTP 429 before code generation. No patch was applied. Cost is unknown; this is not a successful benchmark result. See [provider trial record](PROVIDER_TRIALS.md).
 - The checked-in fixture ablation remains a development artifact with no successful measured trials and must not be used for performance claims.

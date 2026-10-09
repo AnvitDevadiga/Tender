@@ -32,6 +32,7 @@ Requirements: Python 3.12 or newer, Git, and this repository. Docker is needed o
 python3.12 -m venv .venv
 source .venv/bin/activate
 pip install -e '.[dev]'
+python scripts/prepare_fixtures.py
 pytest -q
 PYTHONPATH=src python3 -m forgebench validate-benchmark \
   --manifest experiments/retry-ablation-v1.toml \

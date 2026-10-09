@@ -18,6 +18,8 @@ jobs:
           cache: pip
       - name: Install project and development tools
         run: python -m pip install -e '.[dev]'
+      - name: Prepare deterministic benchmark fixture commits
+        run: python scripts/prepare_fixtures.py
       - name: Lint
         run: ruff check src tests
       - name: Check formatting
