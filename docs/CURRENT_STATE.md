@@ -15,9 +15,10 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 - Plans are schema-validated, bounded, and restricted to repository-contained file paths. The patch request receives the validated plan as untrusted context.
 - A bounded structured tool loop exposes validated repository file/search/Git/dependency operations plus sandboxed commands, tests, and configured lint. It blocks secrets, symlinks, evaluator and benchmark files, records redacted inputs and bounded outputs, and limits tool rounds/calls.
 - The provider can call typed tools for bounded file reads/writes, exact replacements, lexical search, directory listing, Git inspection, dependency lookup, tests, lint, and sandboxed commands. File operations block escapes, symlinks, credentials, and evaluator/benchmark files; commands execute through the selected sandbox.
-- Groq compatibility omits directory listing from its tool menu because Groq rejects some malformed root-path calls before ForgeBench can validate them. Provider HTTP 429 retries honor the suggested delay, bounded to 60 seconds and three retries per request.
+- Groq compatibility exposes only repository search/read/write tools; directory listing and command execution stay out of its tool menu. After a repository edit, ForgeBench ends the provider loop and runs its own configured quality gates.
+- Built-in patch whitespace checking inspects added lines directly so it still works when temporary Git metadata is unavailable after Docker grading.
 - Tool arguments are centrally validated and audit events redact file contents to byte counts and hashes. Tool calls, rounds, and captured outputs are bounded.
-- A passing run must clear built-in `git diff --check`, optional configured static-analysis commands, deterministic patch-scope/size review, and the exact-patch test run on a second clean repository copy.
+- A passing run must clear built-in patch whitespace checking, optional configured static-analysis commands, deterministic patch-scope/size review, and the exact-patch test run on a second clean repository copy.
 - Optional final approval is available through an API route protected by a server-side bearer token; decisions and terminal state changes are stored atomically. This gate is not configured by default.
 - Coding runs require a clean, standalone Git repository. The base commit is recorded before the disposable agent and verifier copies are created.
 - Offline deterministic provider and optional Groq provider adapter.
@@ -44,14 +45,14 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 
 ## Verification
 
-- `python3 -m pytest -q`: 97 passed, with one Starlette/httpx deprecation warning.
+- `pytest -q`: 100 passed, with one Starlette/httpx deprecation warning.
 - `python3 -m compileall -q src tests`: passed.
-- GitHub Actions CI passed on commit `f33c007`, including Ruff lint/format, compilation, all 97 tests, and benchmark validation.
+- GitHub Actions CI passed on commit `cc7cfd9`, including Ruff lint/format, compilation, all 97 tests, and benchmark validation. Local changes after that commit are pending another CI run.
 - Benchmark manifest validation: three pinned task definitions accepted.
 - `python scripts/prepare_fixtures.py` creates the same pinned baseline from a clean clone; the pin test and manifest validation pass locally.
-- Docker images built; the API and worker containers are running, and `GET /health` returned HTTP 200. A network-disabled sandbox smoke test succeeded.
+- Latest worker and sandbox images rebuilt successfully; the local API health endpoint returned HTTP 200, and the corrected Groq-backed task passed end to end.
 - GitHub Pages deployment workflow succeeded; the published page returned HTTP 200 and contained the expected read-only demo notice.
-- A real Groq-backed task on the pinned fixture reached planning and repository search/read, but Groq returned HTTP 429 before code generation. No patch was applied. Cost is unknown; this is not a successful benchmark result. See [provider trial record](PROVIDER_TRIALS.md).
+- A real Groq-backed task completed end to end through the local API and worker: the model produced the percentage fix, the isolated target test passed, and the exact patch passed clean-copy verification. It used 5,634 input and 539 output tokens; the provider returned no cost, so cost is unknown. This is a smoke trial, not a benchmark score. See [provider trial record](PROVIDER_TRIALS.md).
 - The checked-in fixture ablation remains a development artifact with no successful measured trials and must not be used for performance claims.
 
 ## Demo and cost

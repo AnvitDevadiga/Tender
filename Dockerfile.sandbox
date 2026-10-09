@@ -2,4 +2,6 @@ FROM python:3.12-slim
 RUN apt-get update \
     && apt-get install -y --no-install-recommends git \
     && rm -rf /var/lib/apt/lists/*
+COPY requirements-sandbox.txt ./
+RUN pip install --no-cache-dir -r requirements-sandbox.txt
 WORKDIR /workspace

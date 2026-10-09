@@ -1,4 +1,8 @@
-from forgebench.providers import GroqProvider
+import json
+
+import pytest
+
+from forgebench.providers import GroqProvider, ModelResponse
 
 
 def test_groq_request_has_explicit_user_agent(monkeypatch) -> None:
@@ -52,3 +56,27 @@ def test_groq_response_preserves_structured_tool_calls(monkeypatch) -> None:
     assert response.tool_calls[0].id == "call-1"
     assert response.tool_calls[0].name == "read_file"
     assert response.tool_calls[0].arguments == '{"path":"app.py"}'
+
+
+@pytest.mark.asyncio
+async def test_groq_enables_json_mode_for_json_only_system_prompts(monkeypatch) -> None:
+    provider = GroqProvider(api_key="gsk_test")
+    captured = {}
+
+    def fake_request(body):
+        captured.update(json.loads(body))
+        return ModelResponse('{"summary":"fix"}')
+
+    monkeypatch.setattr(provider, "_request", fake_request)
+    await provider.generate(
+        [
+            {
+                "role": "system",
+                "content": 'Return only a JSON object with keys "summary" and "steps".',
+            },
+            {"role": "user", "content": "Plan the change."},
+        ]
+    )
+
+    assert captured["response_format"] == {"type": "json_object"}
+    assert captured["reasoning_format"] == "hidden"

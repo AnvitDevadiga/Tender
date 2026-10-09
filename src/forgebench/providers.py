@@ -49,7 +49,7 @@ class GroqProvider:
     """
 
     endpoint = "https://api.groq.com/openai/v1/chat/completions"
-    supports_directory_listing = False
+    tool_allowlist = frozenset({"search_code", "read_file", "write_file", "replace_text"})
 
     def __init__(
         self,
@@ -76,6 +76,13 @@ class GroqProvider:
         payload: dict[str, Any] = {"model": self.model, "messages": messages, "temperature": 0}
         if self.max_output_tokens is not None:
             payload["max_tokens"] = self.max_output_tokens
+        if any(
+            message.get("role") == "system"
+            and "Return only a JSON object" in str(message.get("content", ""))
+            for message in messages
+        ):
+            payload["response_format"] = {"type": "json_object"}
+            payload["reasoning_format"] = "hidden"
         if tools:
             payload["tools"] = tools
         body = json.dumps(payload).encode("utf-8")

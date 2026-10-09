@@ -76,7 +76,8 @@ def prepare(workspace: Path, expected_commit: str) -> str:
     actual = run_git(workspace, "rev-parse", "HEAD")
     if actual != expected_commit:
         raise RuntimeError(
-            f"fixture pin mismatch for {workspace}: expected {expected_commit}, generated {actual}; "
+            f"fixture pin mismatch for {workspace}: expected {expected_commit}, "
+            f"generated {actual}; "
             "review the fixture change and update every task pin deliberately"
         )
     return actual

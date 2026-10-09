@@ -22,3 +22,28 @@ Earlier attempts exposed Groq's rejection of empty-root `list_directory` tool ca
 ## Interpretation
 
 This is evidence that API enqueueing, worker claiming, disposable-workspace creation, provider planning, and repository tools reached the live provider. It does not prove that generated code can pass tests: no patch reached the grader, clean-copy verifier, or completion gate. Do not report a solve rate or infer a cost from this run. Retry only when the provider quota permits another request; a free key does not guarantee enough TPM for the full prompt and tool loop.
+
+## Follow-up live run
+
+On 2026-10-09, run `d1b6728a-ef97-4b93-8b6e-83fde7c4638a` used the narrowed percentage-only test command. The model changed only the percentage behavior and its task-specific pytest passed. The run then failed because `git diff --check HEAD` could not access Git metadata after sandbox grading. The gate now checks added patch lines directly.
+
+Two follow-up runs after Docker access was restored, `acfdb30d-ab3d-4d59-92b5-2149929d62d9` and `58fa9007-6971-4b3c-a409-00ab7de56866`, failed plan parsing with zero usage. Their run configuration omitted the `groq/` provider prefix, so they selected the offline provider instead of Groq. ForgeBench also now requests Groq JSON mode for planning, accepts a JSON object surrounded by commentary, and retries one malformed plan once while keeping schema and path validation. Groq documents JSON mode in its [Chat Completions API reference](https://console.groq.com/docs/api-reference).
+
+The correctly selected provider run, `3f089cc3-f30b-49ff-98c6-fcc468e9f5a0`, used `groq/openai/gpt-oss-20b`, made the percentage fix, and passed the task-specific test. Its clean-copy check found that verification imported `percentage` from the package root, which does not export it. All fixture verification commands now import from `forgecalc.calculator`.
+
+## Verified end-to-end task
+
+Run `2a5ce4e0-ca02-4f85-9b7e-e541035b51e5` passed the complete local API-to-worker workflow: provider planning, repository edit, isolated targeted pytest, patch review, and the exact-patch verification on a separate clean copy.
+
+| Field | Recorded value |
+| --- | --- |
+| Benchmark ID | `forgecalc-001-live-verified-followup` |
+| Model | `groq/openai/gpt-oss-20b` |
+| Final status | Passed, one attempt |
+| Input / output tokens | 5,634 / 539 |
+| Reported cost | Unknown (`null`); provider returned no cost observation |
+| Patch | `percentage` now divides by 100; no unrelated fixture behavior changed |
+| Target test | Passed, 1 test |
+| Clean-copy verification | Passed |
+
+This is a functional smoke trial, not a benchmark score. One task and one run do not establish solve rate, regression rate, speed, or cost. Repeated trials over a larger task set remain necessary for those claims.

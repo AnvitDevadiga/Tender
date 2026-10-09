@@ -26,6 +26,19 @@ class PatchProvider:
         )
 
 
+class TransientPlanProvider(PatchProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self.plan_calls = 0
+
+    async def generate(self, messages, tools=None):
+        if "implementation plan" in messages[0]["content"].lower():
+            self.plan_calls += 1
+            if self.plan_calls == 1:
+                return ModelResponse("")
+        return await super().generate(messages, tools)
+
+
 class RateLimitedOnceProvider:
     def __init__(self) -> None:
         self.calls = 0
@@ -79,11 +92,15 @@ async def test_provider_retry_parses_millisecond_rate_limit(monkeypatch) -> None
 
 
 class ToolCallingProvider:
+    tool_allowlist = frozenset({"read_file", "replace_text"})
+
     def __init__(self) -> None:
         self.inspected = False
         self.edited = False
+        self.calls = 0
 
     async def generate(self, messages, tools=None):
+        self.calls += 1
         if "implementation plan" in messages[0]["content"].lower():
             return ModelResponse(
                 '{"summary":"Fix the return value","steps":["Inspect and update app.py"],'
@@ -92,6 +109,7 @@ class ToolCallingProvider:
         if not self.inspected:
             self.inspected = True
             assert tools is not None
+            assert {tool["function"]["name"] for tool in tools} == self.tool_allowlist
             return ModelResponse(
                 "",
                 tool_calls=(ToolCall("read-1", "read_file", '{"path":"app.py"}'),),
@@ -122,6 +140,15 @@ def test_plan_rejects_paths_outside_the_repository(tmp_path) -> None:
         )
 
 
+def test_plan_extracts_json_object_from_surrounding_provider_text(tmp_path) -> None:
+    (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
+    plan = AgentPlan.parse(
+        'Here is the plan:\n{"summary":"fix","steps":["edit"],"target_files":["app.py"]}\nDone.',
+        tmp_path,
+    )
+    assert plan.target_files == ("app.py",)
+
+
 def test_plan_drops_unknown_files_and_keeps_only_existing_repo_files(tmp_path) -> None:
     (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
     plan = AgentPlan.parse(
@@ -138,7 +165,7 @@ def test_static_analysis_rejects_whitespace_errors(tmp_path) -> None:
     (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "base"], cwd=tmp_path, check=True)
-    (tmp_path / "app.py").write_text("return 1 \n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("return 2 \n", encoding="utf-8")
     patch = PatchCapture().capture(tmp_path)
 
     grade = AgentWorkflow._static_analysis(
@@ -199,7 +226,8 @@ async def test_workflow_executes_and_audits_structured_repository_tool_calls(tmp
     shutil.copytree(tmp_path, verification_workspace)
     events = []
 
-    result = await AgentWorkflow(ToolCallingProvider()).run(
+    provider = ToolCallingProvider()
+    result = await AgentWorkflow(provider).run(
         Issue(repository="o/r", title="fix return", body="return 2"),
         tmp_path,
         ['python3 -c \'assert open("app.py").read().strip() == "return 2"\''],
@@ -209,6 +237,7 @@ async def test_workflow_executes_and_audits_structured_repository_tool_calls(tmp
     )
 
     assert result.passed is True
+    assert provider.calls == 3
     assert result.tool_calls >= 5
     tool_events = [payload for name, payload in events if name == "agent_tool.completed"]
     assert [event["name"] for event in tool_events] == ["read_file", "replace_text"]
@@ -216,6 +245,10 @@ async def test_workflow_executes_and_audits_structured_repository_tool_calls(tmp
     assert tool_events[0]["input"] == {"path": "app.py"}
     assert "return 1" not in str(tool_events[1]["input"])
     assert "old_text_sha256" in tool_events[1]["input"]
+    assert (
+        "agent_tool_loop.completed",
+        {"attempt": 1, "reason": "repository_edited", "changed_files": ["app.py"]},
+    ) in events
 
 
 @pytest.mark.asyncio
@@ -252,3 +285,27 @@ async def test_workflow_stops_retrying_when_docker_is_unavailable(tmp_path, monk
     assert len(result.attempts) == 1
     assert provider.calls == 2
     assert result.attempts[0].patch.diff
+
+
+@pytest.mark.asyncio
+async def test_workflow_retries_a_malformed_plan_once(tmp_path) -> None:
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
+    (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "initial"], cwd=tmp_path, check=True)
+    verification_workspace = tmp_path.parent / f"{tmp_path.name}-retry-verification"
+    shutil.copytree(tmp_path, verification_workspace)
+    provider = TransientPlanProvider()
+
+    result = await AgentWorkflow(provider).run(
+        Issue(repository="o/r", title="fix", body="fix"),
+        tmp_path,
+        ['python3 -c \'assert open("app.py").read().strip() == "return 2"\''],
+        max_retries=0,
+        verification_workspace=verification_workspace,
+    )
+
+    assert result.passed is True
+    assert provider.plan_calls == 2
