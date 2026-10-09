@@ -27,7 +27,8 @@ def run_git(workspace: Path, *args: str, env: dict[str, str] | None = None) -> s
 
 def prepare(workspace: Path, expected_commit: str) -> str:
     metadata = workspace / ".git"
-    if not metadata.exists():
+    fresh_repository = not metadata.exists()
+    if fresh_repository:
         run_git(workspace, "init", "--quiet", "--initial-branch", BASELINE_BRANCH)
 
     branches = run_git(workspace, "branch", "--list", BASELINE_BRANCH)
@@ -42,12 +43,12 @@ def prepare(workspace: Path, expected_commit: str) -> str:
             )
         return actual
 
-    dirty = run_git(workspace, "status", "--porcelain")
-    allowed = {".gitignore"}
-    if any(line[3:] not in allowed for line in dirty.splitlines()):
-        raise RuntimeError(f"refusing to replace a dirty fixture baseline: {workspace}")
-
-    run_git(workspace, "checkout", "--quiet", "--orphan", BASELINE_BRANCH)
+    if not fresh_repository:
+        dirty = run_git(workspace, "status", "--porcelain")
+        allowed = {".gitignore"}
+        if any(line[3:] not in allowed for line in dirty.splitlines()):
+            raise RuntimeError(f"refusing to replace a dirty fixture baseline: {workspace}")
+        run_git(workspace, "checkout", "--quiet", "--orphan", BASELINE_BRANCH)
     run_git(workspace, "add", "--all")
     commit_env = os.environ.copy()
     commit_env.update(
