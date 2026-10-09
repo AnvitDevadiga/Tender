@@ -47,7 +47,7 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 
 - `pytest -q`: 100 passed, with one Starlette/httpx deprecation warning.
 - `python3 -m compileall -q src tests`: passed.
-- GitHub Actions CI passed on commit `cc7cfd9`, including Ruff lint/format, compilation, all 97 tests, and benchmark validation. Local changes after that commit are pending another CI run.
+- GitHub Actions CI passed for the latest code changes, including Ruff lint/format, compilation, all 100 tests, and benchmark validation.
 - Benchmark manifest validation: three pinned task definitions accepted.
 - `python scripts/prepare_fixtures.py` creates the same pinned baseline from a clean clone; the pin test and manifest validation pass locally.
 - Latest worker and sandbox images rebuilt successfully; the local API health endpoint returned HTTP 200, and the corrected Groq-backed task passed end to end.
