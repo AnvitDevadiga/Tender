@@ -1,0 +1,43 @@
+services:
+  sandbox-image:
+    build:
+      context: .
+      dockerfile: Dockerfile.sandbox
+    image: forgebench-sandbox:local
+    command: ["true"]
+
+  api:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      FORGEBENCH_ENV: local
+      FORGEBENCH_DB_PATH: /data/forgebench.db
+      FORGEBENCH_WORKSPACE_ROOT: /workspaces
+      FORGEBENCH_ARTIFACT_ROOT: /data/artifacts
+      FORGEBENCH_APPROVAL_TOKEN: ${FORGEBENCH_APPROVAL_TOKEN:-}
+      GITHUB_TOKEN: ${GITHUB_TOKEN:-}
+    volumes:
+      - ./.forgebench-data:/data
+      - ./benchmarks/fixtures:/workspaces:ro
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    environment:
+      FORGEBENCH_DB_PATH: /data/forgebench.db
+      FORGEBENCH_WORKSPACE_ROOT: /workspaces
+      FORGEBENCH_ARTIFACT_ROOT: /data/artifacts
+      FORGEBENCH_SANDBOX_IMAGE: forgebench-sandbox:local
+      FORGEBENCH_WORKER_POLL_SECONDS: "1"
+      GROQ_API_KEY: ${GROQ_API_KEY:-}
+      GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
+      TMPDIR: ${PWD}/.forgebench-tmp
+    volumes:
+      - ./.forgebench-data:/data
+      - ${PWD}/.forgebench-tmp:${PWD}/.forgebench-tmp
+      - ./benchmarks/fixtures:/workspaces:ro
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      sandbox-image:
+        condition: service_completed_successfully

@@ -1,0 +1,41 @@
+name: Deploy portfolio demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - demo/**
+      - assets/favicon.svg
+      - .github/workflows/deploy-demo.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Prepare static site
+        run: |
+          mkdir -p _site/assets
+          cp demo/index.html _site/index.html
+          cp assets/favicon.svg _site/assets/favicon.svg
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: _site
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

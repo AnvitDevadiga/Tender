@@ -1,0 +1,30 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install project and development tools
+        run: python -m pip install -e '.[dev]'
+      - name: Lint
+        run: ruff check src tests
+      - name: Check formatting
+        run: ruff format --check src tests
+      - name: Compile source and tests
+        run: python -m compileall -q src tests
+      - name: Run offline test suite
+        run: pytest -q
+      - name: Validate pinned benchmark dataset
+        run: python -m forgebench validate-benchmark --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl

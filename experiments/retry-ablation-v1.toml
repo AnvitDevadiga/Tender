@@ -1,0 +1,10 @@
+name = "retry-ablation-v1"
+dataset = "forgebench-dev-v1"
+description = "Measure whether failure-aware retries justify their extra cost."
+model = "groq/openai/gpt-oss-20b"
+architecture = "single-agent"
+retrieval = "bm25"
+repetitions = 3
+max_tokens = 16000
+max_minutes = 20
+retry_budgets = [0, 1, 2]
