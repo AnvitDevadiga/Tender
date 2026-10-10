@@ -11,10 +11,7 @@ from tender.workflow import AgentPlan, AgentWorkflow
 
 
 def test_provider_errors_have_a_distinct_failure_category() -> None:
-    assert (
-        AgentWorkflow._category("provider_error: rate limit")
-        is FailureCategory.PROVIDER
-    )
+    assert AgentWorkflow._category("provider_error: rate limit") is FailureCategory.PROVIDER
 
 
 class PatchProvider:

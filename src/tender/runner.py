@@ -326,8 +326,7 @@ def summarize_from_records(records: list[dict[str, object]]) -> dict[str, object
     )
     passed = sum(bool(record["passed"]) for record in records)
     provider_failures = sum(
-        str(record.get("failure_category")) == FailureCategory.PROVIDER.value
-        for record in records
+        str(record.get("failure_category")) == FailureCategory.PROVIDER.value for record in records
     )
     recovered = sum(bool(record["passed"]) and int(record["attempts"]) > 1 for record in records)
     retryable = sum(int(record["attempts"]) > 1 for record in records)

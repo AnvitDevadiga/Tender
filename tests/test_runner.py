@@ -227,8 +227,7 @@ def test_summary_separates_actual_cost_from_published_rate_estimate() -> None:
     assert summary["published_rate_estimate_observations"] == 1
 
 
-def test_summary_excludes_provider_failures_from_solve_rate_and_warns_for_few_repositories(
-) -> None:
+def test_summary_ignores_provider_failures_and_warns_for_small_sample() -> None:
     summary = summarize_from_records(
         [
             {
