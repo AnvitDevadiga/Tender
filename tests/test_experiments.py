@@ -1,3 +1,5 @@
+import pytest
+
 from tender.experiments import ExperimentManifest
 from tender.failures import failure_counts
 from tender.metrics import summarize
@@ -13,3 +15,16 @@ def test_manifest_and_metrics() -> None:
     metrics = summarize([])
     assert metrics.pass_rate == 0.0
     assert failure_counts([]) == {}
+
+
+def test_retrieval_ablation_manifest_and_config_bounds() -> None:
+    from pydantic import ValidationError
+
+    from tender.models import BenchmarkConfig
+
+    manifest = ExperimentManifest.load("experiments/retrieval-cap-ab-v1.toml")
+    assert manifest.retrieval_limits == (12, 6)
+    assert manifest.retry_budgets == (0,)
+    assert BenchmarkConfig(retrieval_limit=6).retrieval_limit == 6
+    with pytest.raises(ValidationError):
+        BenchmarkConfig(retrieval_limit=0)

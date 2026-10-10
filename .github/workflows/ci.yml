@@ -30,3 +30,6 @@ jobs:
         run: pytest -q
       - name: Validate pinned benchmark dataset
         run: python -m tender validate-benchmark --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl
+
+      - name: Validate paired retrieval benchmark dataset
+        run: python -m tender validate-benchmark --manifest experiments/retrieval-cap-ab-v1.toml --dataset benchmarks/paired-tasks-v1.jsonl

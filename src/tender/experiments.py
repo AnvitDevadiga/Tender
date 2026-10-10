@@ -106,6 +106,7 @@ class ExperimentManifest:
     input_usd_per_million_tokens: float | None = None
     output_usd_per_million_tokens: float | None = None
     pricing_basis: str | None = None
+    retrieval_limits: tuple[int, ...] = (12,)
 
     @classmethod
     def load(cls, path: str | Path) -> "ExperimentManifest":
@@ -136,6 +137,7 @@ class ExperimentManifest:
             pricing_basis=(
                 str(data["pricing_basis"]).strip() if data.get("pricing_basis") else None
             ),
+            retrieval_limits=tuple(int(limit) for limit in data.get("retrieval_limits", [12])),
         )
         if (
             not manifest.name.strip()
@@ -148,6 +150,10 @@ class ExperimentManifest:
             )
         if not manifest.retry_budgets or any(int(budget) < 0 for budget in manifest.retry_budgets):
             raise ValueError("manifest retry_budgets must contain a non-negative budget")
+        if not manifest.retrieval_limits or any(
+            not 1 <= limit <= 50 for limit in manifest.retrieval_limits
+        ):
+            raise ValueError("manifest retrieval_limits must contain values between 1 and 50")
         if manifest.sandbox not in {"local", "docker"}:
             raise ValueError("manifest sandbox must be local or docker")
         if (manifest.input_usd_per_million_tokens is None) != (

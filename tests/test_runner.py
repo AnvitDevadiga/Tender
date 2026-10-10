@@ -227,6 +227,46 @@ def test_summary_separates_actual_cost_from_published_rate_estimate() -> None:
     assert summary["published_rate_estimate_observations"] == 1
 
 
+def test_summary_excludes_provider_failures_from_solve_rate_and_warns_for_few_repositories(
+) -> None:
+    summary = summarize_from_records(
+        [
+            {
+                "task_id": "task-1",
+                "repository": "repo-a",
+                "passed": True,
+                "attempts": 1,
+                "retry_budget": 0,
+                "retrieval_limit": 6,
+                "latency_ms": 100,
+                "cost_usd": None,
+                "input_tokens": 100,
+                "output_tokens": 10,
+                "failure_category": "none",
+            },
+            {
+                "task_id": "task-2",
+                "repository": "repo-a",
+                "passed": False,
+                "attempts": 1,
+                "retry_budget": 0,
+                "retrieval_limit": 6,
+                "latency_ms": 50,
+                "cost_usd": None,
+                "input_tokens": 0,
+                "output_tokens": 0,
+                "failure_category": "provider_error",
+            },
+        ]
+    )
+
+    assert summary["provider_failures"] == 1
+    assert summary["solve_rate_excluding_provider_failures"] == 1.0
+    assert summary["unique_repositories"] == 1
+    assert summary["sample_size_warning"]
+    assert summary["by_retrieval_limit"]["6"]["provider_failures"] == 1
+
+
 def test_offline_experiment_runs_setup_patch_and_independent_verification(
     tmp_path, monkeypatch
 ) -> None:

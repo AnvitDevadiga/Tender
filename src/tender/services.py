@@ -105,6 +105,7 @@ class RunService:
                     verification_commands=run.config.verification_commands,
                     verification_workspace=verification_workspace,
                     require_human_approval=run.config.require_human_approval,
+                    retrieval_limit=run.config.retrieval_limit,
                 )
         except LeaseLost:
             return self.store.get_run(str(run.id)) or run

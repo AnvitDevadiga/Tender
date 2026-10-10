@@ -3,11 +3,18 @@ import subprocess
 
 import pytest
 
-from tender.models import Issue
+from tender.models import FailureCategory, Issue
 from tender.patches import PatchCapture
 from tender.providers import ModelResponse, ToolCall
 from tender.sandbox import SandboxUnavailable
 from tender.workflow import AgentPlan, AgentWorkflow
+
+
+def test_provider_errors_have_a_distinct_failure_category() -> None:
+    assert (
+        AgentWorkflow._category("provider_error: rate limit")
+        is FailureCategory.PROVIDER
+    )
 
 
 class PatchProvider:

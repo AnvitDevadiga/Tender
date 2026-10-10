@@ -1,0 +1,16 @@
+name = "retrieval-cap-ab-v1"
+dataset = "tender-utils-30-v1"
+description = "Paired test of a 6-hit context cap against the 12-hit baseline across 30 tasks in five pinned utility fixtures."
+model = "groq/openai/gpt-oss-20b"
+architecture = "single-agent"
+retrieval = "bm25"
+retrieval_limits = [12, 6]
+repetitions = 1
+max_tokens = 1200
+max_minutes = 360
+retry_budgets = [0]
+sandbox = "local"
+timeout_seconds = 240
+input_usd_per_million_tokens = 0.075
+output_usd_per_million_tokens = 0.30
+pricing_basis = "Groq GPT-OSS 20B published developer list price snapshot 2026-10-10; estimate only, not provider-reported billing."

@@ -31,6 +31,7 @@ class FailureCategory(StrEnum):
     NONE = "none"
     ENVIRONMENT = "environment_setup"
     MODEL_TOOL = "model_tool_failure"
+    PROVIDER = "provider_error"
     RETRIEVAL = "retrieval"
     PLANNING = "planning"
     PATCH = "patch"
@@ -60,6 +61,7 @@ class BenchmarkConfig(BaseModel):
     model: str = "local-deterministic"
     architecture: str = "single-agent"
     retrieval: str = "text"
+    retrieval_limit: int = Field(default=12, ge=1, le=50)
     max_retries: int = Field(default=2, ge=0, le=10)
     setup_commands: list[str] = Field(default_factory=list, max_length=20)
     commands: list[str] = Field(default_factory=lambda: ["pytest -q"])

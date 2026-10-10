@@ -196,12 +196,15 @@ class AgentWorkflow:
         verification_commands: list[str] | None = None,
         verification_workspace: str | Path | None = None,
         require_human_approval: bool = False,
+        retrieval_limit: int = 12,
     ) -> WorkflowResult:
         workspace = Path(workspace)
         if not workspace.is_dir():
             raise ValueError(f"workspace does not exist: {workspace}")
         if not commands:
             raise ValueError("at least one verification command is required")
+        if not 1 <= retrieval_limit <= 50:
+            raise ValueError("retrieval_limit must be between 1 and 50")
         attempts: list[Attempt] = []
         feedback = ""
         input_tokens = output_tokens = 0
@@ -234,7 +237,9 @@ class AgentWorkflow:
             self._emit(
                 event_sink, "attempt.started", {"attempt": number, "max_attempts": max_retries + 1}
             )
-            hits = self.retriever.search(workspace, f"{issue.title} {issue.body}", limit=12)
+            hits = self.retriever.search(
+                workspace, f"{issue.title} {issue.body}", limit=retrieval_limit
+            )
             tool_calls += 1
             self._emit(
                 event_sink,
@@ -916,7 +921,7 @@ class AgentWorkflow:
         if reason.startswith("tooling_error:"):
             return FailureCategory.ENVIRONMENT
         if reason.startswith("provider_error:"):
-            return FailureCategory.MODEL_TOOL
+            return FailureCategory.PROVIDER
         if reason in {"command_failed", "protected_files_modified"}:
             return FailureCategory.TEST
         if reason.startswith("static_analysis_failed") or reason.startswith(

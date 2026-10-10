@@ -41,7 +41,7 @@ Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). For Doc
 
 ## Live demo and current evidence
 
-The [public demo](https://anvitdevadiga.github.io/tender/) replays a recorded run. It does not accept tasks or execute submitted code. The current experiment contains 18 trials over three small fixture tasks. It is useful for demonstrating the evaluation pipeline, but too small to support broad solve-rate claims. Cost is a published-rate estimate, not a billing record. The archived result retains the hashes from its original run; the current benchmark metadata was rebranded and repinned, so those historical hashes will differ from today’s task file. Read the [trial notes](docs/PROVIDER_TRIALS.md) and [raw results](docs/experiments/groq-retry-ablation-3tasks-v1.json).
+The [public demo](https://anvitdevadiga.github.io/tender/) replays a recorded run. It does not accept tasks or execute submitted code. The paired retrieval-cap experiment planned 60 trials across 30 tasks and five pinned repositories, but provider quota and tool-call errors left only five clean task pairs. Those pairs showed no solve-rate gain from the smaller context cap, so they do not support an efficiency claim. Read the [experiment report](docs/experiments/retrieval-cap-ab-v1.md), [raw results](docs/experiments/retrieval-cap-ab-v1.json), and earlier [provider trial notes](docs/PROVIDER_TRIALS.md). Token-cost figures are published-rate estimates, not billing records.
 
 ## Project map
 

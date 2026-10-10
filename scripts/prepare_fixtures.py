@@ -6,7 +6,10 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASET = ROOT / "benchmarks" / "tasks.jsonl"
+DATASETS = (
+    ROOT / "benchmarks" / "tasks.jsonl",
+    ROOT / "benchmarks" / "paired-tasks-v1.jsonl",
+)
 BASELINE_BRANCH = "tender-baseline"
 AUTHOR_NAME = "Tender Fixture Builder"
 AUTHOR_EMAIL = "fixtures@example.invalid"
@@ -84,20 +87,21 @@ def prepare(workspace: Path, expected_commit: str) -> str:
 
 
 def main() -> None:
-    tasks = [
-        json.loads(line)
-        for line in DATASET.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
     workspaces: dict[Path, set[str]] = {}
-    for task in tasks:
-        raw_workspace = Path(task["workspace"])
-        workspace = (ROOT / raw_workspace).resolve()
-        workspace.relative_to(ROOT)
-        commit = task.get("base_commit") or task["issue"].get("base_commit")
-        if not isinstance(commit, str) or len(commit) != 40:
-            raise ValueError(f"task {task.get('task_id')} has no full base commit pin")
-        workspaces.setdefault(workspace, set()).add(commit)
+    for dataset in DATASETS:
+        tasks = [
+            json.loads(line)
+            for line in dataset.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        for task in tasks:
+            raw_workspace = Path(task["workspace"])
+            workspace = (ROOT / raw_workspace).resolve()
+            workspace.relative_to(ROOT)
+            commit = task.get("base_commit") or task["issue"].get("base_commit")
+            if not isinstance(commit, str) or len(commit) != 40:
+                raise ValueError(f"task {task.get('task_id')} has no full base commit pin")
+            workspaces.setdefault(workspace, set()).add(commit)
 
     for workspace, commits in sorted(workspaces.items()):
         if len(commits) != 1:
