@@ -92,10 +92,7 @@ def test_file_tools_block_escape_secrets_and_evaluator_files(tmp_path) -> None:
     agent_tools = toolbox(repo)
     assert agent_tools.execute("read_file", '{"path":"../private.txt"}').ok is False
     assert agent_tools.execute("read_file", '{"path":".env.local"}').ok is False
-    assert (
-        agent_tools.execute("read_file", '{"path":".tender/evaluator/assertions.py"}').ok
-        is False
-    )
+    assert agent_tools.execute("read_file", '{"path":".tender/evaluator/assertions.py"}').ok is False
     blocked = agent_tools.execute(
         "write_file",
         json.dumps({"path": "./.tender/evaluator/assertions.py", "content": "bad"}),

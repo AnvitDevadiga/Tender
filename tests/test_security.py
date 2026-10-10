@@ -68,8 +68,7 @@ def test_isolated_workspace_copy_removes_local_git_helpers(tmp_path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=source, check=True)
     config = source / ".git" / "config"
     config.write_text(
-        config.read_text(encoding="utf-8")
-        + "\n[diff]\n\texternal = touch /tmp/tender-unsafe\n",
+        config.read_text(encoding="utf-8") + "\n[diff]\n\texternal = touch /tmp/tender-unsafe\n",
         encoding="utf-8",
     )
 
