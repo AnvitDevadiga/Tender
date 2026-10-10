@@ -259,7 +259,6 @@ async def run_experiment(
                                 "model": config.model,
                                 "architecture": config.architecture,
                                 "retrieval": config.retrieval,
-                                "retrieval_limit": config.retrieval_limit,
                                 "input_tokens": run.input_tokens,
                                 "output_tokens": run.output_tokens,
                                 "cost_usd": run.cost_usd,
