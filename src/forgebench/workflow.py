@@ -15,7 +15,7 @@ from .patches import PatchArtifact, PatchCapture
 from .providers import ModelProvider, ModelResponse
 from .repository import RepositoryAnalyzer, RepositoryMap
 from .retrieval import SearchHit, TextRetriever
-from .sandbox import CommandResult, DockerSandbox, Sandbox, SandboxUnavailable
+from .sandbox import CommandResult, SandboxProvider, SandboxUnavailable, create_sandbox
 from .state import WorkflowState, WorkflowStateMachine
 from .tools import AgentToolbox
 
@@ -773,12 +773,8 @@ class AgentWorkflow:
         )
 
     @staticmethod
-    def _sandbox(workspace: Path, backend: str, timeout_seconds: int) -> Sandbox | DockerSandbox:
-        if backend == "docker":
-            return DockerSandbox(workspace, timeout_seconds=timeout_seconds)
-        if backend == "local":
-            return Sandbox(workspace, timeout_seconds=timeout_seconds)
-        raise ValueError(f"unsupported sandbox backend: {backend}")
+    def _sandbox(workspace: Path, backend: str, timeout_seconds: int) -> SandboxProvider:
+        return create_sandbox(workspace, backend, timeout_seconds)
 
     @staticmethod
     def _emit(

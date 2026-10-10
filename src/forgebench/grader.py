@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .patches import PatchArtifact
-from .sandbox import CommandResult, Sandbox
+from .sandbox import CommandResult, SandboxProvider
 
 
 @dataclass(frozen=True)
@@ -16,7 +16,7 @@ class Grade:
 class TestGrader:
     def grade(
         self,
-        sandbox: Sandbox,
+        sandbox: SandboxProvider,
         commands: list[str],
         patch: PatchArtifact | None = None,
         setup_commands: list[str] | None = None,

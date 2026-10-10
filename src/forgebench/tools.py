@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field
 
 from .retrieval import TextRetriever
-from .sandbox import DockerSandbox, Sandbox
+from .sandbox import SandboxProvider, create_sandbox
 
 
 class ToolArguments(BaseModel):
@@ -156,7 +156,7 @@ class AgentToolbox:
         self.test_commands = test_commands
         self.setup_commands = setup_commands
         self.static_analysis_commands = static_analysis_commands
-        self._sandbox: Sandbox | DockerSandbox | None = None
+        self._sandbox: SandboxProvider | None = None
         self._retriever = TextRetriever()
 
     @classmethod
@@ -388,14 +388,9 @@ class AgentToolbox:
                 break
         return results
 
-    def _get_sandbox(self) -> Sandbox | DockerSandbox:
+    def _get_sandbox(self) -> SandboxProvider:
         if self._sandbox is None:
-            if self.sandbox_backend == "docker":
-                self._sandbox = DockerSandbox(self.root, timeout_seconds=self.timeout_seconds)
-            elif self.sandbox_backend == "local":
-                self._sandbox = Sandbox(self.root, timeout_seconds=self.timeout_seconds)
-            else:
-                raise ValueError("unsupported sandbox backend")
+            self._sandbox = create_sandbox(self.root, self.sandbox_backend, self.timeout_seconds)
         return self._sandbox
 
     def _git(self, arguments: list[str]) -> str:

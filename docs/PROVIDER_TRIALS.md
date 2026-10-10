@@ -47,3 +47,24 @@ Run `2a5ce4e0-ca02-4f85-9b7e-e541035b51e5` passed the complete local API-to-work
 | Clean-copy verification | Passed |
 
 This is a functional smoke trial, not a benchmark score. One task and one run do not establish solve rate, regression rate, speed, or cost. Repeated trials over a larger task set remain necessary for those claims.
+
+
+## Repeated Groq fixture trial (2026-10-10)
+
+Manifest: [`groq-retry-ablation-3tasks-v1.toml`](../experiments/groq-retry-ablation-3tasks-v1.toml). Raw, versioned records: [experiment JSON](experiments/groq-retry-ablation-3tasks-v1.json). The pinned development dataset has three synthetic ForgeCalc tasks; each was run twice at retry budgets 0, 1, and 2 (18 completed trials). Model: `groq/openai/gpt-oss-20b`; single-agent workflow; BM25 retrieval; local trusted-fixture sandbox.
+
+| Measurement | Result |
+| --- | ---: |
+| Completed / passed trials | 18 / 18 (100%) |
+| Unique tasks / repetitions | 3 / 2 per retry budget |
+| Regression-free verification | 18 / 18 (100%) |
+| Average workflow latency | 52.62 seconds |
+| Input tokens | 139,576 total |
+| Output tokens | 15,200 total |
+| Attempts | 1 per run on average; retry recovery not exercised |
+| Provider-reported cost | Unknown (`null`) |
+| Published-rate estimate | $0.01503 total for 18 runs |
+
+The cost estimate applies Groq's published GPT-OSS 20B rates ($0.075 per million input tokens and $0.30 per million output tokens) to recorded token counts; it is not a billing record. Rates and account limits can change. See Groq's [model pricing](https://console.groq.com/docs/model/openai/gpt-oss-20b) and [rate limits](https://console.groq.com/docs/rate-limits).
+
+**Interpretation:** this is a useful repeatability/measurement pipeline check, not a credible broad solve-rate estimate. All three tasks are small, synthetic, and drawn from the same fixture repository; the 18 observations are clustered repeats, not 18 independent tasks. The run only checks the retry-budget conditions because every task passed on its first attempt. It cannot support claims about regressions on larger repositories, retry recovery, model comparisons, or arbitrary coding work. Grow the pinned dataset substantially and repeat the experiment before making such claims.

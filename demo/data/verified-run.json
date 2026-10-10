@@ -1,0 +1,59 @@
+{
+  "run_id": "2a5ce4e0-ca02-4f85-9b7e-e541035b51e5",
+  "recorded_at": "2026-10-09",
+  "benchmark_id": "forgecalc-001-live-verified-followup",
+  "task": "Interpret 15 as fifteen percent",
+  "model": "Groq · GPT-OSS 20B",
+  "status": "Passed",
+  "attempts": 1,
+  "latency_ms": 8050,
+  "input_tokens": 5634,
+  "output_tokens": 539,
+  "reported_cost_usd": null,
+  "unique_tasks_in_experiment": 1,
+  "patch": "diff --git a/forgecalc/calculator.py b/forgecalc/calculator.py\nindex 644c671..92bd873 100644\n--- a/forgecalc/calculator.py\n+++ b/forgecalc/calculator.py\n@@ -1,6 +1,6 @@\n def percentage(value: float, percent: float) -> float:\n     \"\"\"Return percent of value.\"\"\"\n-    return value * percent\n+    return value * percent / 100\n \n \n def clamp(value: float, lower: float, upper: float) -> float:\n",
+  "steps": [
+    {
+      "title": "Queue and isolate",
+      "state": "Queued → running",
+      "summary": "The API queued the pinned task. A separate worker claimed it and created disposable agent and verification copies.",
+      "evidence": "Base commit: b8d1da9a4a165ea89cbbc5d0392a53eb9218bb1c. The source fixture was left unchanged."
+    },
+    {
+      "title": "Inspect the repository",
+      "state": "Repository analysis → retrieval",
+      "summary": "ForgeBench mapped the small Python repository and selected relevant source and test excerpts.",
+      "evidence": "The run trace records repository analysis, retrieval results, and selected files."
+    },
+    {
+      "title": "Plan the change",
+      "state": "Plan",
+      "summary": "Groq returned a validated plan targeting the percentage function.",
+      "evidence": "718 input tokens and 275 output tokens were recorded for planning."
+    },
+    {
+      "title": "Edit one function",
+      "state": "Implement",
+      "summary": "The model searched, read the source, and changed the percentage calculation to divide by 100.",
+      "evidence": "Three repository tool calls; only forgecalc/calculator.py changed."
+    },
+    {
+      "title": "Run the target test",
+      "state": "Test passed",
+      "summary": "The percentage-specific pytest passed in the isolated Docker sandbox.",
+      "evidence": "1 passed. The sandbox had no network access."
+    },
+    {
+      "title": "Review and verify the exact patch",
+      "state": "Quality gates passed",
+      "summary": "Whitespace and patch-scope checks passed. ForgeBench applied the same patch to a second clean copy and checked expected percentage values.",
+      "evidence": "The independent clean-copy check passed. The configured source checkout remained unchanged."
+    },
+    {
+      "title": "Record completion",
+      "state": "Complete",
+      "summary": "The run finished successfully in one attempt.",
+      "evidence": "5,634 input tokens; 539 output tokens. Provider-reported cost was unavailable. One task is a smoke trial, not a benchmark score."
+    }
+  ]
+}

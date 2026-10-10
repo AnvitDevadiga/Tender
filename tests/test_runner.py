@@ -202,6 +202,31 @@ def test_retry_budget_summary_reports_latency_and_task_sample_size() -> None:
     assert summary["by_retry_budget"]["0"]["average_latency_ms"] is None
 
 
+def test_summary_separates_actual_cost_from_published_rate_estimate() -> None:
+    summary = summarize_from_records(
+        [
+            {
+                "task_id": "task-1",
+                "passed": True,
+                "target_tests_passed": True,
+                "regression_free": True,
+                "attempts": 1,
+                "retry_budget": 0,
+                "latency_ms": 100,
+                "cost_usd": None,
+                "published_rate_cost_estimate_usd": 0.0005,
+                "input_tokens": 5_000,
+                "output_tokens": 500,
+                "failure_category": "none",
+            }
+        ]
+    )
+
+    assert summary["total_cost_usd"] is None
+    assert summary["total_published_rate_cost_estimate_usd"] == 0.0005
+    assert summary["published_rate_estimate_observations"] == 1
+
+
 def test_offline_experiment_runs_setup_patch_and_independent_verification(
     tmp_path, monkeypatch
 ) -> None:

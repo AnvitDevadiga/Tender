@@ -103,6 +103,9 @@ class ExperimentManifest:
     retry_budgets: tuple[int, ...]
     sandbox: str = "local"
     timeout_seconds: int = 120
+    input_usd_per_million_tokens: float | None = None
+    output_usd_per_million_tokens: float | None = None
+    pricing_basis: str | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> "ExperimentManifest":
@@ -120,6 +123,19 @@ class ExperimentManifest:
             retry_budgets=tuple(data["retry_budgets"]),
             sandbox=str(data.get("sandbox", "local")),
             timeout_seconds=int(data.get("timeout_seconds", 120)),
+            input_usd_per_million_tokens=(
+                float(data["input_usd_per_million_tokens"])
+                if data.get("input_usd_per_million_tokens") is not None
+                else None
+            ),
+            output_usd_per_million_tokens=(
+                float(data["output_usd_per_million_tokens"])
+                if data.get("output_usd_per_million_tokens") is not None
+                else None
+            ),
+            pricing_basis=(
+                str(data["pricing_basis"]).strip() if data.get("pricing_basis") else None
+            ),
         )
         if (
             not manifest.name.strip()
@@ -134,6 +150,19 @@ class ExperimentManifest:
             raise ValueError("manifest retry_budgets must contain a non-negative budget")
         if manifest.sandbox not in {"local", "docker"}:
             raise ValueError("manifest sandbox must be local or docker")
+        if (manifest.input_usd_per_million_tokens is None) != (
+            manifest.output_usd_per_million_tokens is None
+        ):
+            raise ValueError("both published token prices must be provided together")
+        if manifest.input_usd_per_million_tokens is not None and (
+            manifest.input_usd_per_million_tokens < 0
+            or manifest.output_usd_per_million_tokens is None
+            or manifest.output_usd_per_million_tokens < 0
+            or not manifest.pricing_basis
+        ):
+            raise ValueError(
+                "published token prices require non-negative values and a pricing basis"
+            )
         if not 1 <= manifest.timeout_seconds <= 3600:
             raise ValueError("manifest timeout_seconds must be between 1 and 3600")
         return manifest

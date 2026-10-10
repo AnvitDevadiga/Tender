@@ -270,7 +270,10 @@ async def test_workflow_stops_retrying_when_docker_is_unavailable(tmp_path, monk
         def destroy(self) -> None:
             pass
 
-    monkeypatch.setattr("forgebench.workflow.DockerSandbox", MissingDocker)
+    monkeypatch.setattr(
+        "forgebench.workflow.create_sandbox",
+        lambda root, backend, timeout_seconds: MissingDocker(),
+    )
     provider = PatchProvider()
     result = await AgentWorkflow(provider).run(
         Issue(repository="o/r", title="fix", body="fix"),

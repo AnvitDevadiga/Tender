@@ -6,7 +6,7 @@ ForgeBench benchmarks are intended to be reproducible repository-level software 
 
 Task JSONL schema v2 requires a stable `task_id`, issue, local workspace, full 40-character `base_commit`, setup commands, agent test commands, independent verification commands, and a per-task timeout. An optional `static_analysis_commands` array adds lint or other static checks. The issue's optional base commit must match the task pin. The runner verifies the resolved checkout SHA before execution, bounds setup and agent execution by task/manifest budgets, and stops at the experiment-wide `max_minutes` budget. A budget-truncated output is marked `complete: false`.
 
-The `run-experiment` benchmark runner supports only the local sandbox for trusted, local fixture datasets. Do not use it to execute arbitrary public datasets. Setup commands execute in the run's disposable copy before its agent tests. The separate API workflow requires Docker mode; setup and test commands share one disposable container per attempt, which is removed after grading. Local image build and sandbox smoke checks have succeeded. A provider-backed API task reached plan and repository inspection but did not generate a patch because Groq's TPM limit was reached; see [provider trial record](PROVIDER_TRIALS.md).
+The `run-experiment` benchmark runner supports only the local sandbox for trusted, local fixture datasets. Do not use it to execute arbitrary public datasets. Setup commands execute in the run's disposable copy before its agent tests. The separate API workflow requires Docker mode; setup and test commands share one disposable container per attempt, which is removed after grading. Local image build and sandbox smoke checks have succeeded. A small repeated Groq experiment now exists: 18 completed trials over three unique synthetic tasks, two repetitions for retry budgets 0/1/2. See [provider trial record](PROVIDER_TRIALS.md) and the [raw experiment JSON](experiments/groq-retry-ablation-3tasks-v1.json). Treat it as exploratory only.
 
 The agent records a concise provider-generated plan, then runs target tests, built-in diff checks, optional static-analysis commands, deterministic patch review, and verification on a separate clean copy. The experiment runner performs an additional task-owned verification pass and records its output. The fixture verification checks are separate assertions stored in the pinned dataset. `regression_free_rate` uses target-test-passing runs as its denominator; runs that fail before verification are not counted as regression observations.
 
@@ -23,7 +23,7 @@ Compare result files with `python -m forgebench compare --results a.json b.json 
 
 Result files include a schema version, complete/partial status, manifest and dataset hashes, trial design, run records, and summaries broken down by retry budget. Historical files that lack required trial provenance cannot be compared under the current contract.
 
-The checked-in `results/fixture-retry-ablation.json` is a development artifact with zero successful runs and early provider/tool failures. Keep it for traceability; do not describe it as measured agent performance. The live API trial is also incomplete because it failed before patch generation.
+The checked-in `results/fixture-retry-ablation.json` is a historical development artifact with zero successful runs. Keep it for traceability. The newer repeated experiment has 18/18 passes, but only three unique synthetic tasks; do not generalize its result.
 
 ## Required reproducibility record
 

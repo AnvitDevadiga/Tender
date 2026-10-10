@@ -43,7 +43,7 @@ This repository contains a local evaluation prototype. It is not yet the complet
 - The supplied Canva wordmark, tightly cropped and preserved as `assets/forgebench-canva-cropped.png`.
 - Docker packaging and tests for the API and persistence layer.
 
-No benchmark metrics are included yet. Numbers must come from recorded experiments.
+An exploratory repeated Groq experiment is now recorded: 18/18 trial runs passed across three unique synthetic tasks (two repetitions per retry budget). This clustered sample is not a general solve-rate claim. See the [trial record](docs/PROVIDER_TRIALS.md) and [raw run data](docs/experiments/groq-retry-ablation-3tasks-v1.json).
 
 ## Architecture seam
 
@@ -70,7 +70,7 @@ Copy [`.env.example`](.env.example) to `.env`, edit the local values, then expor
 
 ## Free static portfolio demo
 
-The read-only page is live at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/). It does not expose the API or execute submitted code. The [`Deploy portfolio demo` workflow](.github/workflows/deploy-demo.yml) republishes it when `demo/` changes. GitHub Pages is available for public repositories on GitHub Free; see [GitHub's Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+The interactive recorded-run demo is live at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/). It replays a verified local run and exploratory repeated-trial results; it does not accept tasks, expose the API, or execute submitted code. The [`Deploy portfolio demo` workflow](.github/workflows/deploy-demo.yml) republishes it when `demo/` changes. GitHub Pages is available for public repositories on GitHub Free; see [GitHub's Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
 
 Or run the API with Docker Compose:
 
@@ -128,7 +128,7 @@ Each task must provide an issue, a clean local Git checkout, and evaluator comma
 
 ## Project status
 
-The repository contains a local research loop with pinned fixture tasks, provider abstraction, retrieval, patch application, selectable command runners, bounded retries, grading, persistent traces, artifacts, experiment manifests, aggregation, metrics endpoints, and a run explorer. The API/worker queue is persisted in SQLite with atomic claims, renewable leases, and stale-owner write fencing; expired jobs fail without automatic replay. Workflow checkpoint resume, PostgreSQL, public demo controls, production deployment, and broad benchmark evidence remain incomplete. Do not treat the local fixture as evidence of general coding-agent performance.
+The repository contains a local research loop with pinned fixture tasks, provider abstraction, retrieval, patch application, selectable command runners, bounded retries, grading, persistent traces, artifacts, experiment manifests, aggregation, metrics endpoints, and a run explorer. The API/worker queue is persisted in SQLite with atomic claims, renewable leases, and stale-owner write fencing; expired jobs fail without automatic replay. Workflow checkpoint resume, PostgreSQL, public demo controls, production deployment, and broad benchmark evidence remain incomplete. One exploratory 18-run experiment across three unique fixture tasks is documented in [the provider trial record](docs/PROVIDER_TRIALS.md); do not generalize it to arbitrary coding-agent performance.
 
 ## Local API workflow
 

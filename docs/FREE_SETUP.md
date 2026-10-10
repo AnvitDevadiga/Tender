@@ -43,7 +43,7 @@ Those commands do not call Groq and do not create an AI benchmark result. A real
 
 ## Can I host it for free?
 
-A static portfolio page with empty run states can be hosted without running code tasks. A small API demo may also fit a provider's free web plan, but that is not a safe or complete ForgeBench deployment today.
+A static portfolio page can host an interactive replay of a recorded run without running new code or using an API key. The public page shows one verified fixture task; it is not a public coding service. Anonymous code execution is intentionally not deployed.
 
 The local Compose setup includes a separate Docker worker with persistent local SQLite/artifact storage. It mounts the host Docker socket, which is highly privileged and is suitable only for local development. The project still lacks public authentication, quotas, production-grade worker recovery, and stronger isolation. Do not expose anonymous code execution publicly.
 
@@ -56,4 +56,4 @@ Free hosting plans also have limits that conflict with a persistent benchmark se
 - **Real model-generated patches:** require a provider API key and may be limited or billed by the provider.
 - **Free public web hosting:** possible for a limited demo; persistent execution, storage, and safe arbitrary-repository tasks are not available as a complete, configured path in the current code.
 
-The project has attempted a real Groq-backed task on the pinned fixture. It reached planning and repository inspection, then stopped at Groq's free-tier token-per-minute limit before producing a patch. Docker images, the sandbox, and the API/worker path have been exercised locally. The current repository suite has 97 passing tests; this test count is not an AI success rate. See [the provider trial record](PROVIDER_TRIALS.md) for the run ID and limits.
+ForgeBench has completed an exploratory 18-run Groq experiment across three unique pinned fixture tasks. All trials passed. Provider-reported cost was unavailable; the published-rate estimate is labeled separately and is not account billing. Docker images, the sandbox, and the API/worker path have been exercised locally. The current repository suite has 102 passing tests; this test count is not an AI success rate. See [the provider trial record](PROVIDER_TRIALS.md) for run IDs and evaluation limits.

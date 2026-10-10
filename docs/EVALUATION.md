@@ -18,8 +18,8 @@ The comparison command accepts only complete result files with matching dataset 
 - The experiment CLI is currently local-only for trusted fixture datasets. API workflow commands use Docker; Docker image builds, a sandbox smoke test, and one live worker execution have succeeded locally.
 - A passing configured command is only as strong as the benchmark's evaluator. Verification tests must be independent and protected from agent modification.
 - Local fixture runs are not evidence about performance on arbitrary GitHub repositories.
-- A real Groq-backed task reached planning and repository search/read but hit the provider's free-tier TPM limit before producing a patch. The 97 passing tests are ForgeBench's own tests, not agent resolution results. See [provider trial record](PROVIDER_TRIALS.md); it is not an AI performance result.
-- The checked-in `results/fixture-retry-ablation.json` is a historical development run with zero passes and provider/tool failures. It is retained as an audit artifact, not a performance claim.
+- The latest repeated Groq fixture experiment completed 18/18 runs across three unique synthetic tasks, repeated twice at retry budgets 0/1/2. It is exploratory and strongly clustered; it does not establish general performance. See [provider trial record](PROVIDER_TRIALS.md).
+- The checked-in `results/fixture-retry-ablation.json` is a historical development run with zero passes and provider/tool failures. It is retained as an audit artifact, not a performance claim. The newer [three-task repeated trial](experiments/groq-retry-ablation-3tasks-v1.json) is likewise exploratory, not a general benchmark score.
 
 ## Reporting rules
 

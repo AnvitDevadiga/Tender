@@ -58,13 +58,15 @@ Implemented states include `TASK_RECEIVED`, `REPOSITORY_SETUP`, `REPOSITORY_ANAL
 
 The prototype stores typed run snapshots, approval decisions, and ordered events in SQLite. The production design should use PostgreSQL with migrations and normalized entities for repositories, tasks, runs, steps, tool calls, patches, test runs, benchmark datasets/tasks/runs, evaluations, model usage, approvals, and failures. Large logs and patches should be immutable object artifacts with content hashes; database records hold identity and references. Dataset definitions and commit pins remain versioned artifacts.
 
+The command execution seam is a `SandboxProvider` protocol with a shared `run`/`destroy` lifecycle. A central factory selects the trusted local runner or the network-disabled Docker runner, and both the agent tools and quality gates use that same boundary. This makes adding another execution backend an explicit adapter change rather than a second set of backend-selection branches.
+
 ## Repository understanding
 
 The current deterministic retriever ranks bounded text excerpts by issue-token overlap, adds capped Python AST definition matches for named functions/classes, skips common generated/vendor directories and credential files, and records path, line, score, and selection reason. A bounded repository map reports languages, configuration, entry points, tests, dependency manifests, and command hints. Dependency graph expansion and symbol lookup for other languages remain future work. Retrieval should remain bounded by file, byte, file-count, symbol-file, and token budgets. Embeddings are optional and should only be added when the benchmark demonstrates measurable value.
 
 ## Sandbox boundary
 
-Docker now has a per-attempt `create`/`execute`/`destroy` lifecycle. A common `SandboxProvider` interface with file operations and snapshot/restore is still needed before adding another provider. Docker workers receive a read-only source mount, copy it to bounded writable tmpfs, run as a non-root identity, and have no network or provider/GitHub credentials. The Docker daemon remains a powerful host boundary; a stronger VM/firecracker provider can implement the interface later.
+Docker has a per-attempt `create`/`execute`/`destroy` lifecycle. The current `SandboxProvider` contract covers bounded command execution and cleanup; file operations and snapshot/restore capabilities are still future extensions. Docker workers receive a read-only source mount, copy it to bounded writable tmpfs, run as a non-root identity, and have no network or provider/GitHub credentials. The Docker daemon remains a powerful host boundary; a stronger VM/firecracker provider can implement the same command lifecycle later.
 
 ## Technology decisions
 

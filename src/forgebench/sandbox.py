@@ -8,6 +8,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Protocol
 
 MAX_COMMAND_OUTPUT_BYTES = 64 * 1024
 _OUTPUT_TRUNCATION_MARKER = b"\n...[ForgeBench output truncated]"
@@ -99,6 +100,14 @@ class CommandResult:
 
 class SandboxUnavailable(RuntimeError):
     """Raised when the requested isolation backend cannot be started."""
+
+
+class SandboxProvider(Protocol):
+    """Lifecycle shared by trusted local and isolated container runners."""
+
+    def run(self, command: str) -> CommandResult: ...
+
+    def destroy(self) -> None: ...
 
 
 class Sandbox:
@@ -321,3 +330,12 @@ class DockerSandbox:
         if self._temp_dir is not None:
             self._temp_dir.cleanup()
             self._temp_dir = None
+
+
+def create_sandbox(root: str | Path, backend: str, timeout_seconds: int) -> SandboxProvider:
+    """Construct the requested command runner behind one lifecycle seam."""
+    if backend == "docker":
+        return DockerSandbox(root, timeout_seconds=timeout_seconds)
+    if backend == "local":
+        return Sandbox(root, timeout_seconds=timeout_seconds)
+    raise ValueError(f"unsupported sandbox backend: {backend}")

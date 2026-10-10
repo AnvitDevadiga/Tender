@@ -243,6 +243,9 @@ async def run_experiment(
                             "input_tokens": run.input_tokens,
                             "output_tokens": run.output_tokens,
                             "cost_usd": run.cost_usd,
+                            "published_rate_cost_estimate_usd": _published_rate_cost_estimate(
+                                manifest, run.input_tokens, run.output_tokens
+                            ),
                             "tool_calls": run.tool_calls,
                             "verification": verification_results,
                         }
@@ -268,6 +271,13 @@ async def run_experiment(
             "max_minutes": manifest.max_minutes,
             "max_tokens": manifest.max_tokens,
             "sandbox": manifest.sandbox,
+            "pricing": {
+                "basis": manifest.pricing_basis,
+                "input_usd_per_million_tokens": manifest.input_usd_per_million_tokens,
+                "output_usd_per_million_tokens": manifest.output_usd_per_million_tokens,
+            }
+            if manifest.pricing_basis
+            else None,
         },
         "dataset": {
             "path": str(dataset_path),
@@ -356,6 +366,18 @@ def summarize_from_records(records: list[dict[str, object]]) -> dict[str, object
             if any(record["cost_usd"] is not None for record in records)
             else None
         ),
+        "total_published_rate_cost_estimate_usd": (
+            sum(
+                float(record["published_rate_cost_estimate_usd"])
+                for record in records
+                if record.get("published_rate_cost_estimate_usd") is not None
+            )
+            if any(record.get("published_rate_cost_estimate_usd") is not None for record in records)
+            else None
+        ),
+        "published_rate_estimate_observations": sum(
+            record.get("published_rate_cost_estimate_usd") is not None for record in records
+        ),
         "total_tool_calls": sum(int(record.get("tool_calls", 0)) for record in records),
         "total_input_tokens": sum(int(record["input_tokens"]) for record in records),
         "total_output_tokens": sum(int(record["output_tokens"]) for record in records),
@@ -368,6 +390,21 @@ def summarize_from_records(records: list[dict[str, object]]) -> dict[str, object
         ),
         "by_retry_budget": by_budget,
     }
+
+
+def _published_rate_cost_estimate(
+    manifest: ExperimentManifest, input_tokens: int, output_tokens: int
+) -> float | None:
+    if (
+        manifest.input_usd_per_million_tokens is None
+        or manifest.output_usd_per_million_tokens is None
+    ):
+        return None
+    amount = (
+        input_tokens * manifest.input_usd_per_million_tokens
+        + output_tokens * manifest.output_usd_per_million_tokens
+    ) / 1_000_000
+    return round(amount, 10)
 
 
 def compare_experiment_results(paths: list[str | Path]) -> dict[str, object]:

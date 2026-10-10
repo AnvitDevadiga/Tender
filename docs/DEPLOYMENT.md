@@ -28,7 +28,7 @@ flowchart LR
 
 The control plane and execution plane should scale independently. Workers must not inherit provider, database, or GitHub credentials. Sandbox jobs should be disposable and resource-limited. Use authentication, per-user quotas, curated public demo tasks, and explicit approval for GitHub writes.
 
-The repository does not yet provide production deployment manifests, PostgreSQL migrations, production worker health management, or an interactive public coding demo. Local SQLite-backed worker leases are implemented, but they do not replace production queue/health infrastructure. The static portfolio page is read-only. Do not infer production readiness from the local Compose file. Serverless request execution is not suitable for persistent sandbox workloads.
+The repository does not yet provide production deployment manifests, PostgreSQL migrations, production worker health management, or a public coding execution service. The portfolio page is interactive playback of recorded evidence, but accepts no task and runs no submitted code. Local SQLite-backed worker leases are implemented, but they do not replace production queue/health infrastructure. Do not infer production readiness from the local Compose file. Serverless request execution is not suitable for persistent sandbox workloads.
 
 ## Pre-production checklist
 

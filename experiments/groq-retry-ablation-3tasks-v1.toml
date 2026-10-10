@@ -1,0 +1,15 @@
+name = "groq-retry-ablation-3tasks-v1"
+dataset = "forgebench-dev-v1"
+description = "Exploratory repeated single-agent trials across the three pinned fixture tasks."
+model = "groq/openai/gpt-oss-20b"
+architecture = "single-agent"
+retrieval = "bm25"
+repetitions = 2
+max_tokens = 1200
+max_minutes = 20
+retry_budgets = [0, 1, 2]
+sandbox = "local"
+timeout_seconds = 180
+input_usd_per_million_tokens = 0.075
+output_usd_per_million_tokens = 0.30
+pricing_basis = "Groq GPT-OSS 20B published developer list price snapshot 2026-10-10; estimate only, not provider-reported billing."

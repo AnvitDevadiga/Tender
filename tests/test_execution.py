@@ -1,9 +1,11 @@
 import subprocess
 
+import pytest
+
 from forgebench.grader import TestGrader
 from forgebench.repository import RepositoryManager
 from forgebench.retrieval import TextRetriever
-from forgebench.sandbox import MAX_COMMAND_OUTPUT_BYTES, CommandResult, Sandbox
+from forgebench.sandbox import MAX_COMMAND_OUTPUT_BYTES, CommandResult, Sandbox, create_sandbox
 
 
 def make_repo(path) -> str:
@@ -31,6 +33,15 @@ def test_sandbox_and_grader_execute_commands(tmp_path) -> None:
     grade = TestGrader().grade(Sandbox(tmp_path / "repo"), ["python3 -c 'print(\"ok\")'"])
     assert grade.passed is True
     assert grade.reason == "all_commands_passed"
+
+
+def test_sandbox_factory_uses_one_supported_backend_boundary(tmp_path) -> None:
+    sandbox = create_sandbox(tmp_path, "local", timeout_seconds=12)
+
+    assert isinstance(sandbox, Sandbox)
+    assert sandbox.timeout_seconds == 12
+    with pytest.raises(ValueError, match="unsupported sandbox backend"):
+        create_sandbox(tmp_path, "unknown", timeout_seconds=12)
 
 
 def test_sandbox_caps_command_output(tmp_path) -> None:
