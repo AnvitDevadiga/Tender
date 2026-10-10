@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import subprocess
 
-from forgebench.tools import AgentToolbox
+from tender.tools import AgentToolbox
 
 
 def make_repository(root) -> None:
@@ -14,7 +14,7 @@ def make_repository(root) -> None:
     )
     subprocess.run(["git", "init", "-q"], cwd=root, check=True)
     subprocess.run(["git", "config", "user.email", "tools@example.test"], cwd=root, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Tools Test"], cwd=root, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Tools Test"], cwd=root, check=True)
     subprocess.run(["git", "add", "."], cwd=root, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=root, check=True)
 
@@ -93,15 +93,15 @@ def test_file_tools_block_escape_secrets_and_evaluator_files(tmp_path) -> None:
     assert agent_tools.execute("read_file", '{"path":"../private.txt"}').ok is False
     assert agent_tools.execute("read_file", '{"path":".env.local"}').ok is False
     assert (
-        agent_tools.execute("read_file", '{"path":".forgebench/evaluator/assertions.py"}').ok
+        agent_tools.execute("read_file", '{"path":".tender/evaluator/assertions.py"}').ok
         is False
     )
     blocked = agent_tools.execute(
         "write_file",
-        json.dumps({"path": "./.forgebench/evaluator/assertions.py", "content": "bad"}),
+        json.dumps({"path": "./.tender/evaluator/assertions.py", "content": "bad"}),
     )
     assert blocked.ok is False
-    assert not (repo / ".forgebench").exists()
+    assert not (repo / ".tender").exists()
 
 
 def test_write_replace_and_git_diff_preserve_sanitized_audit(tmp_path) -> None:

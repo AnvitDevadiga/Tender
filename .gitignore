@@ -3,10 +3,10 @@ __pycache__/
 *.py[cod]
 .pytest_cache/
 .DS_Store
-forgebench.db
+tender.db
 *.db
 artifacts/
 results/
 .env
-.forgebench-data/
-.forgebench-tmp/
+.tender-data/
+.tender-tmp/

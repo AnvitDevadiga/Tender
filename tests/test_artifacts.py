@@ -1,8 +1,8 @@
 import json
 
-from forgebench.artifacts import ArtifactStore
-from forgebench.models import EvaluationRun, FailureCategory, Issue, RunStatus
-from forgebench.workflow import WorkflowResult
+from tender.artifacts import ArtifactStore
+from tender.models import EvaluationRun, FailureCategory, Issue, RunStatus
+from tender.workflow import WorkflowResult
 
 
 def test_artifact_store_writes_portable_run_directory(tmp_path) -> None:

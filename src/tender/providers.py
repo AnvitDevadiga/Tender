@@ -96,7 +96,7 @@ class GroqProvider:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "ForgeBench/0.1 (+https://github.com/forgebench)",
+                "User-Agent": "Tender/0.1 (+https://github.com/tender)",
             },
         )
         try:

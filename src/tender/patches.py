@@ -24,8 +24,8 @@ class PatchCapture:
 
     def __init__(self, protected_paths: set[str] | None = None) -> None:
         self.protected_paths = protected_paths or {
-            ".forgebench/evaluator",
-            ".forgebench/benchmark.toml",
+            ".tender/evaluator",
+            ".tender/benchmark.toml",
         }
 
     def capture(self, root: str | Path) -> PatchArtifact:

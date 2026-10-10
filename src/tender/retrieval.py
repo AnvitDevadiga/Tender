@@ -45,8 +45,8 @@ class TextRetriever:
         "credentials",
     }
     protected_paths = {
-        ".forgebench/evaluator",
-        ".forgebench/benchmark.toml",
+        ".tender/evaluator",
+        ".tender/benchmark.toml",
         "benchmarks/tasks.jsonl",
     }
     max_file_bytes = 512 * 1024

@@ -103,12 +103,12 @@ async def run_one(
 
 
 async def serve() -> None:
-    db_path = os.getenv("FORGEBENCH_DB_PATH", "forgebench.db")
-    root_value = os.getenv("FORGEBENCH_WORKSPACE_ROOT")
+    db_path = os.getenv("TENDER_DB_PATH", "tender.db")
+    root_value = os.getenv("TENDER_WORKSPACE_ROOT")
     if not root_value:
-        raise RuntimeError("FORGEBENCH_WORKSPACE_ROOT is required for worker execution")
-    poll_seconds = max(0.1, min(float(os.getenv("FORGEBENCH_WORKER_POLL_SECONDS", "1")), 30.0))
-    lease_seconds = max(10, min(int(os.getenv("FORGEBENCH_WORKER_LEASE_SECONDS", "90")), 3600))
+        raise RuntimeError("TENDER_WORKSPACE_ROOT is required for worker execution")
+    poll_seconds = max(0.1, min(float(os.getenv("TENDER_WORKER_POLL_SECONDS", "1")), 30.0))
+    lease_seconds = max(10, min(int(os.getenv("TENDER_WORKER_LEASE_SECONDS", "90")), 3600))
     store = RunStore(db_path)
     worker_id = str(uuid4())
     while True:
@@ -116,7 +116,7 @@ async def serve() -> None:
         processed = await run_one(
             store,
             root_value,
-            os.getenv("FORGEBENCH_ARTIFACT_ROOT", "artifacts"),
+            os.getenv("TENDER_ARTIFACT_ROOT", "artifacts"),
             worker_id,
             lease_seconds,
         )

@@ -29,4 +29,4 @@ jobs:
       - name: Run offline test suite
         run: pytest -q
       - name: Validate pinned benchmark dataset
-        run: python -m forgebench validate-benchmark --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl
+        run: python -m tender validate-benchmark --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl

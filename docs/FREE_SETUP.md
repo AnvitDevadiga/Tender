@@ -1,10 +1,10 @@
 # Free Local Use, API Keys, and Deployment
 
-ForgeBench is the current working project name. It can be explored locally without paying for an AI provider. This guide separates the free engineering checks from real model use and public hosting.
+Tender is the current working project name. It can be explored locally without paying for an AI provider. This guide separates the free engineering checks from real model use and public hosting.
 
 ## What this project does
 
-Think of ForgeBench as a workshop with two parts:
+Think of Tender as a workshop with two parts:
 
 - **The robot:** reads a software task, searches a code repository, proposes a patch, and runs tests.
 - **The judge and notebook:** checks whether tests pass and records the task, patch, tool activity, time, token use, and cost when available.
@@ -15,7 +15,7 @@ The second part matters because a code suggestion by itself does not prove the c
 
 | Activity | API key needed? | What it proves |
 |---|---:|---|
-| Run the unit tests | No | The ForgeBench code passes its own checks. |
+| Run the unit tests | No | The Tender code passes its own checks. |
 | Validate the pinned fixture dataset | No | The benchmark file and commit pins follow the format. |
 | Run the offline deterministic provider | No | The run and failure-recording paths work; it does not show coding ability. |
 | Ask Groq to generate a real patch | Yes, `GROQ_API_KEY` | A real model was called. Results depend on model availability and account limits. |
@@ -34,7 +34,7 @@ source .venv/bin/activate
 pip install -e '.[dev]'
 python scripts/prepare_fixtures.py
 pytest -q
-PYTHONPATH=src python3 -m forgebench validate-benchmark \
+PYTHONPATH=src python3 -m tender validate-benchmark \
   --manifest experiments/retry-ablation-v1.toml \
   --dataset benchmarks/tasks.jsonl
 ```
@@ -56,4 +56,4 @@ Free hosting plans also have limits that conflict with a persistent benchmark se
 - **Real model-generated patches:** require a provider API key and may be limited or billed by the provider.
 - **Free public web hosting:** possible for a limited demo; persistent execution, storage, and safe arbitrary-repository tasks are not available as a complete, configured path in the current code.
 
-ForgeBench has completed an exploratory 18-run Groq experiment across three unique pinned fixture tasks. All trials passed. Provider-reported cost was unavailable; the published-rate estimate is labeled separately and is not account billing. Docker images, the sandbox, and the API/worker path have been exercised locally. The current repository suite has 102 passing tests; this test count is not an AI success rate. See [the provider trial record](PROVIDER_TRIALS.md) for run IDs and evaluation limits.
+Tender has completed an exploratory 18-run Groq experiment across three unique pinned fixture tasks. All trials passed. Provider-reported cost was unavailable; the published-rate estimate is labeled separately and is not account billing. Docker images, the sandbox, and the API/worker path have been exercised locally. The current repository suite has 102 passing tests; this test count is not an AI success rate. See [the provider trial record](PROVIDER_TRIALS.md) for run IDs and evaluation limits.

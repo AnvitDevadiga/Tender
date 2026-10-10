@@ -26,7 +26,7 @@
   "dataset": {
     "path": "benchmarks/tasks.jsonl",
     "sha256": "f24db99a965ea2b4e9210c0d204d3b3984ed6ffd483c0efac081bb2a6aeb4939",
-    "declared_version": "forgebench-dev-v1"
+    "declared_version": "tender-dev-v1"
   },
   "runs": [
     {

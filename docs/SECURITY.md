@@ -2,7 +2,7 @@
 
 ## Status
 
-This document describes the current prototype boundary and the requirements for safe deployment. ForgeBench is not currently safe to expose as a public arbitrary-code execution service. Do not deploy it publicly with anonymous run creation enabled.
+This document describes the current prototype boundary and the requirements for safe deployment. Tender is not currently safe to expose as a public arbitrary-code execution service. Do not deploy it publicly with anonymous run creation enabled.
 
 ## Threat model
 
@@ -12,14 +12,14 @@ Assets requiring protection include host files, provider credentials, GitHub tok
 
 ## Current boundaries and gaps
 
-- API workflow execution is disabled unless `FORGEBENCH_WORKSPACE_ROOT` is set. A requested workspace must resolve beneath that root, and API workflows must select Docker. The service rejects symlinks and special files, enforces workspace file/size bounds, normalizes permissions, and applies patches only to a disposable copy. This reduces arbitrary host-path exposure but does not add authentication, authorization, rate limits, or curated repository policy.
+- API workflow execution is disabled unless `TENDER_WORKSPACE_ROOT` is set. A requested workspace must resolve beneath that root, and API workflows must select Docker. The service rejects symlinks and special files, enforces workspace file/size bounds, normalizes permissions, and applies patches only to a disposable copy. This reduces arbitrary host-path exposure but does not add authentication, authorization, rate limits, or curated repository policy.
 - Local `Sandbox` is a timeout wrapper, not an isolation boundary.
 - Typed model tools enforce repository-root path checks, reject symlinks and common credential paths, hide evaluator/benchmark files, and cap file/output sizes. File edits target only the disposable workspace; shell commands use the selected sandbox. The local backend remains restricted to trusted fixtures.
 - Docker runner disables network, bounds CPU/memory/PIDs, drops capabilities, and uses a read-only root filesystem. It copies the read-only source mount into a disposable writable tmpfs and runs commands as UID 65532. Setup and test commands share one attempt container, destroyed after grading or timeout. Captured output is bounded. It still depends on a privileged host Docker daemon. Patch application and diff capture happen in the service process against its disposable run copy. Treat this as defense in depth for controlled experiments, not a complete hostile-code guarantee.
 - The Docker execution path has not been smoke-tested in this environment because the Docker daemon socket is unavailable. Unit tests verify timeout cleanup behavior with a controlled process stub.
 - General API authentication, authorization, rate limiting, curated task policy, and per-user resource quotas are not implemented. The optional final-approval endpoint alone requires a server-configured bearer token of at least 32 characters; this does not secure the rest of the API.
 - Worker startup marks an interrupted run failed and records that it was not replayed; durable continuation is not implemented.
-- API run creation now writes a queued job and relative workspace identity to SQLite and returns without executing code. A separate worker atomically claims the oldest queued job, renews a database lease, and independently validates its workspace against `FORGEBENCH_WORKSPACE_ROOT`. Workers periodically fail expired jobs without replay, and owner/expiry checks fence stale database writes. The local Compose worker alone has access to the host Docker socket; this is a high-privilege local-development setup, not a public deployment pattern. Workflow checkpoint resume and safe retries remain unimplemented.
+- API run creation now writes a queued job and relative workspace identity to SQLite and returns without executing code. A separate worker atomically claims the oldest queued job, renews a database lease, and independently validates its workspace against `TENDER_WORKSPACE_ROOT`. Workers periodically fail expired jobs without replay, and owner/expiry checks fence stale database writes. The local Compose worker alone has access to the host Docker socket; this is a high-privilege local-development setup, not a public deployment pattern. Workflow checkpoint resume and safe retries remain unimplemented.
 - GitHub issue import accepts only canonical HTTPS issue URLs, constructs requests to the fixed GitHub API host, rejects redirects to other hosts, and caps the response at 1 MB. Repository clone handling still needs strict source allowlists/SSRF controls before remote exposure.
 - API and worker processes are split, but secret isolation is incomplete: provider credentials are read by the worker and the local Compose worker has host Docker socket access. A production worker must use a stronger isolation boundary and narrowly scoped credentials.
 

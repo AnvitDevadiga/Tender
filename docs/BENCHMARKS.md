@@ -1,6 +1,6 @@
 # Benchmarks
 
-ForgeBench benchmarks are intended to be reproducible repository-level software tasks. The existing local fixture and JSONL runner form an experimental starting point; they are not a broad public benchmark and do not establish model superiority.
+Tender benchmarks are intended to be reproducible repository-level software tasks. The existing local fixture and JSONL runner form an experimental starting point; they are not a broad public benchmark and do not establish model superiority.
 
 ## Current format and runner
 
@@ -13,13 +13,13 @@ The agent records a concise provider-generated plan, then runs target tests, bui
 Run the fixture experiment after installing the package:
 
 ```bash
-python -m forgebench validate-benchmark --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl
-python -m forgebench run-experiment --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl --output results/fixture-retry-ablation.json
+python -m tender validate-benchmark --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl
+python -m tender run-experiment --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl --output results/fixture-retry-ablation.json
 ```
 
 Do not treat a command's completion as a successful benchmark claim without inspecting each run and its artifacts. Provider-free deterministic mode is a failure-path baseline, not a coding-capability baseline.
 
-Compare result files with `python -m forgebench compare --results a.json b.json --output comparison.json`. The command rejects incomplete files, mismatched dataset hashes, task cohorts, retry budgets or repetition counts, and duplicate run IDs. It groups raw runs by model, architecture, and retrieval configuration, reports paired task outcomes, and includes a small-sample warning. It does not compute uncertainty or prove statistical significance.
+Compare result files with `python -m tender compare --results a.json b.json --output comparison.json`. The command rejects incomplete files, mismatched dataset hashes, task cohorts, retry budgets or repetition counts, and duplicate run IDs. It groups raw runs by model, architecture, and retrieval configuration, reports paired task outcomes, and includes a small-sample warning. It does not compute uncertainty or prove statistical significance.
 
 Result files include a schema version, complete/partial status, manifest and dataset hashes, trial design, run records, and summaries broken down by retry budget. Historical files that lack required trial provenance cannot be compared under the current contract.
 

@@ -1,5 +1,5 @@
 name = "groq-retry-ablation-3tasks-v1"
-dataset = "forgebench-dev-v1"
+dataset = "tender-dev-v1"
 description = "Exploratory repeated single-agent trials across the three pinned fixture tasks."
 model = "groq/openai/gpt-oss-20b"
 architecture = "single-agent"

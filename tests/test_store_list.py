@@ -1,5 +1,5 @@
-from forgebench.models import EvaluationRun, Issue
-from forgebench.store import RunStore
+from tender.models import EvaluationRun, Issue
+from tender.store import RunStore
 
 
 def test_store_lists_newest_runs(tmp_path) -> None:

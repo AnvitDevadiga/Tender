@@ -3,9 +3,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from forgebench.models import EvaluationRun, Issue, RunEvent, RunStatus
-from forgebench.state import WorkflowState
-from forgebench.store import LeaseLost, RunStore
+from tender.models import EvaluationRun, Issue, RunEvent, RunStatus
+from tender.state import WorkflowState
+from tender.store import LeaseLost, RunStore
 
 
 def test_store_round_trip_and_append_only_events(tmp_path) -> None:
@@ -180,7 +180,7 @@ def test_state_transition_and_event_persist_atomically(tmp_path) -> None:
 def test_idempotency_key_is_bound_to_request_fingerprint(tmp_path) -> None:
     import pytest
 
-    from forgebench.store import IdempotencyConflict
+    from tender.store import IdempotencyConflict
 
     store = RunStore(tmp_path / "runs.db")
     first = EvaluationRun(issue=Issue(repository="o/r", title="Bug"))

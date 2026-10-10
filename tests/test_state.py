@@ -1,6 +1,6 @@
 import pytest
 
-from forgebench.state import (
+from tender.state import (
     InvalidWorkflowTransition,
     WorkflowState,
     WorkflowStateMachine,

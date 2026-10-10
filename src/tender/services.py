@@ -74,7 +74,7 @@ class RunService:
         try:
             base_commit = RepositoryManager.validate_clean_git_repository(workspace)
             run.metadata["base_commit"] = base_commit
-            with tempfile.TemporaryDirectory(prefix="forgebench-run-") as temp_dir:
+            with tempfile.TemporaryDirectory(prefix="tender-run-") as temp_dir:
                 isolated_workspace = RepositoryManager.isolated_copy(
                     workspace, Path(temp_dir) / "workspace"
                 )

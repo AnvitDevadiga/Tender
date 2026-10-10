@@ -22,7 +22,7 @@ from .models import (
 from .services import RunService
 from .store import ApprovalConflict, IdempotencyConflict, RunStore
 
-service = RunService(store=RunStore(os.getenv("FORGEBENCH_DB_PATH", "forgebench.db")))
+service = RunService(store=RunStore(os.getenv("TENDER_DB_PATH", "tender.db")))
 
 
 @asynccontextmanager
@@ -30,8 +30,8 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="ForgeBench", version="0.1.0", lifespan=lifespan)
-workspace_root_value = os.getenv("FORGEBENCH_WORKSPACE_ROOT")
+app = FastAPI(title="Tender", version="0.1.0", lifespan=lifespan)
+workspace_root_value = os.getenv("TENDER_WORKSPACE_ROOT")
 workspace_root = Path(workspace_root_value).expanduser().resolve() if workspace_root_value else None
 dashboard_path = Path(__file__).resolve().parents[2] / "dashboard"
 if dashboard_path.is_dir():
@@ -75,12 +75,12 @@ async def create_run(request: CreateRunRequest) -> EvaluationRun:
             status_code=400, detail="API workflow execution requires the docker sandbox"
         )
     if request.config.require_human_approval:
-        approval_token = os.getenv("FORGEBENCH_APPROVAL_TOKEN", "")
+        approval_token = os.getenv("TENDER_APPROVAL_TOKEN", "")
         if len(approval_token) < 32:
             raise HTTPException(
                 status_code=503,
                 detail=(
-                    "human approval requires FORGEBENCH_APPROVAL_TOKEN with at least 32 characters"
+                    "human approval requires TENDER_APPROVAL_TOKEN with at least 32 characters"
                 ),
             )
     supplied = Path(request.workspace).expanduser()
@@ -147,11 +147,11 @@ async def resolve_run_approval(
     request: HumanApprovalRequest,
     authorization: str | None = Header(default=None),
 ) -> EvaluationRun:
-    token = os.getenv("FORGEBENCH_APPROVAL_TOKEN", "")
+    token = os.getenv("TENDER_APPROVAL_TOKEN", "")
     if len(token) < 32:
         raise HTTPException(
             status_code=503,
-            detail="approval endpoint is disabled until FORGEBENCH_APPROVAL_TOKEN is configured",
+            detail="approval endpoint is disabled until TENDER_APPROVAL_TOKEN is configured",
         )
     if not hmac.compare_digest(authorization or "", f"Bearer {token}"):
         raise HTTPException(status_code=401, detail="invalid approval credentials")

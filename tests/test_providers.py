@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from forgebench.providers import GroqProvider, ModelResponse
+from tender.providers import GroqProvider, ModelResponse
 
 
 def test_groq_request_has_explicit_user_agent(monkeypatch) -> None:
@@ -23,10 +23,10 @@ def test_groq_request_has_explicit_user_agent(monkeypatch) -> None:
         captured.update(dict(req.header_items()))
         return Response()
 
-    monkeypatch.setattr("forgebench.providers.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("tender.providers.request.urlopen", fake_urlopen)
     result = provider._request(b'{"model":"openai/gpt-oss-20b"}')
     assert result.text == "ok"
-    assert captured["User-agent"].startswith("ForgeBench/")
+    assert captured["User-agent"].startswith("Tender/")
 
 
 def test_groq_response_preserves_structured_tool_calls(monkeypatch) -> None:
@@ -46,7 +46,7 @@ def test_groq_response_preserves_structured_tool_calls(monkeypatch) -> None:
                 b'"usage":{"prompt_tokens":3,"completion_tokens":2}}'
             )
 
-    monkeypatch.setattr("forgebench.providers.request.urlopen", lambda req, timeout: Response())
+    monkeypatch.setattr("tender.providers.request.urlopen", lambda req, timeout: Response())
 
     response = provider._request(b'{"model":"openai/gpt-oss-20b"}')
 

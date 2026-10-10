@@ -3,7 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.sandbox
-    image: forgebench-sandbox:local
+    image: tender-sandbox:local
     command: ["true"]
 
   api:
@@ -11,31 +11,31 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     environment:
-      FORGEBENCH_ENV: local
-      FORGEBENCH_DB_PATH: /data/forgebench.db
-      FORGEBENCH_WORKSPACE_ROOT: /workspaces
-      FORGEBENCH_ARTIFACT_ROOT: /data/artifacts
-      FORGEBENCH_APPROVAL_TOKEN: ${FORGEBENCH_APPROVAL_TOKEN:-}
+      TENDER_ENV: local
+      TENDER_DB_PATH: /data/tender.db
+      TENDER_WORKSPACE_ROOT: /workspaces
+      TENDER_ARTIFACT_ROOT: /data/artifacts
+      TENDER_APPROVAL_TOKEN: ${TENDER_APPROVAL_TOKEN:-}
       GITHUB_TOKEN: ${GITHUB_TOKEN:-}
     volumes:
-      - ./.forgebench-data:/data
+      - ./.tender-data:/data
       - ./benchmarks/fixtures:/workspaces:ro
   worker:
     build:
       context: .
       dockerfile: Dockerfile.worker
     environment:
-      FORGEBENCH_DB_PATH: /data/forgebench.db
-      FORGEBENCH_WORKSPACE_ROOT: /workspaces
-      FORGEBENCH_ARTIFACT_ROOT: /data/artifacts
-      FORGEBENCH_SANDBOX_IMAGE: forgebench-sandbox:local
-      FORGEBENCH_WORKER_POLL_SECONDS: "1"
+      TENDER_DB_PATH: /data/tender.db
+      TENDER_WORKSPACE_ROOT: /workspaces
+      TENDER_ARTIFACT_ROOT: /data/artifacts
+      TENDER_SANDBOX_IMAGE: tender-sandbox:local
+      TENDER_WORKER_POLL_SECONDS: "1"
       GROQ_API_KEY: ${GROQ_API_KEY:-}
       GROQ_MODEL: ${GROQ_MODEL:-openai/gpt-oss-20b}
-      TMPDIR: ${PWD}/.forgebench-tmp
+      TMPDIR: ${PWD}/.tender-tmp
     volumes:
-      - ./.forgebench-data:/data
-      - ${PWD}/.forgebench-tmp:${PWD}/.forgebench-tmp
+      - ./.tender-data:/data
+      - ${PWD}/.tender-tmp:${PWD}/.tender-tmp
       - ./benchmarks/fixtures:/workspaces:ro
       - /var/run/docker.sock:/var/run/docker.sock
     depends_on:

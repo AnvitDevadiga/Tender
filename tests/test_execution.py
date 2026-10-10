@@ -2,10 +2,10 @@ import subprocess
 
 import pytest
 
-from forgebench.grader import TestGrader
-from forgebench.repository import RepositoryManager
-from forgebench.retrieval import TextRetriever
-from forgebench.sandbox import MAX_COMMAND_OUTPUT_BYTES, CommandResult, Sandbox, create_sandbox
+from tender.grader import TestGrader
+from tender.repository import RepositoryManager
+from tender.retrieval import TextRetriever
+from tender.sandbox import MAX_COMMAND_OUTPUT_BYTES, CommandResult, Sandbox, create_sandbox
 
 
 def make_repo(path) -> str:
@@ -13,7 +13,7 @@ def make_repo(path) -> str:
     (path / "app.py").write_text("def greeting():\n    return 'hello'\n", encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=path, check=True)
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=path, check=True)
     return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=path, text=True).strip()

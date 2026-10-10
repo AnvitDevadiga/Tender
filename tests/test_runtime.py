@@ -1,6 +1,6 @@
-from forgebench.models import BenchmarkConfig
-from forgebench.providers import DeterministicProvider, GroqProvider
-from forgebench.runtime import provider_for
+from tender.models import BenchmarkConfig
+from tender.providers import DeterministicProvider, GroqProvider
+from tender.runtime import provider_for
 
 
 def test_runtime_defaults_to_offline_provider() -> None:

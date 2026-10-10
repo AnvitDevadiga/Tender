@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from forgebench.repository import RepositoryAnalyzer
-from forgebench.retrieval import TextRetriever
+from tender.repository import RepositoryAnalyzer
+from tender.retrieval import TextRetriever
 
 
 def test_retriever_ranks_issue_terms_and_tracks_selection_reason(tmp_path) -> None:
@@ -50,7 +50,7 @@ def test_retriever_skips_credentials_and_oversized_files(tmp_path) -> None:
 
 
 def test_retriever_hides_evaluator_and_secret_material(tmp_path) -> None:
-    protected = tmp_path / ".forgebench" / "evaluator"
+    protected = tmp_path / ".tender" / "evaluator"
     protected.mkdir(parents=True)
     (protected / "assertions.py").write_text("percentage regression", encoding="utf-8")
     (tmp_path / "service-secret.json").write_text("percentage credential", encoding="utf-8")

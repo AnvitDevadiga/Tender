@@ -25,11 +25,11 @@ class LeaseLost(RuntimeError):
 class RunStore:
     """Small SQLite persistence boundary; PostgreSQL can replace it without changing services."""
 
-    def __init__(self, path: str | Path = "forgebench.db") -> None:
+    def __init__(self, path: str | Path = "tender.db") -> None:
         self.path = str(path)
         self._memory = self.path == ":memory:"
         self._dsn = (
-            f"file:forgebench-{id(self)}?mode=memory&cache=shared" if self._memory else self.path
+            f"file:tender-{id(self)}?mode=memory&cache=shared" if self._memory else self.path
         )
         self._anchor = sqlite3.connect(self._dsn, uri=self._memory) if self._memory else None
         if not self._memory:

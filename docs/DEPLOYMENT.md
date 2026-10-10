@@ -9,7 +9,7 @@ The API port binds to `127.0.0.1` so it is not exposed on the local network by d
 docker compose up --build
 ```
 
-Compose mounts local state under `.forgebench-data/`, which is gitignored. The example fixture workspace is mounted read-only at `/workspaces`; use task paths relative to it. The worker needs the host Docker daemon running. Workers heartbeat renewable leases; expired jobs are marked failed without replay, and stale owners cannot commit further run state. The queue can coordinate concurrent claims, though this local Compose example starts one worker by default.
+Compose mounts local state under `.tender-data/`, which is gitignored. The example fixture workspace is mounted read-only at `/workspaces`; use task paths relative to it. The worker needs the host Docker daemon running. Workers heartbeat renewable leases; expired jobs are marked failed without replay, and stale owners cannot commit further run state. The queue can coordinate concurrent claims, though this local Compose example starts one worker by default.
 
 Copy `.env.example` to `.env`; Compose interpolates the listed provider, approval, and GitHub values into only the required service. Never commit `.env`. Never mount the Docker socket into a public API container or a public worker.
 

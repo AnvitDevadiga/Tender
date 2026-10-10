@@ -2,13 +2,13 @@ import subprocess
 
 import pytest
 
-from forgebench.patches import PatchCapture
+from tender.patches import PatchCapture
 
 
 def test_patch_capture_records_diff_and_detects_protected_changes(tmp_path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=tmp_path, check=True)
     target = tmp_path / "app.py"
     target.write_text("return 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "app.py"], cwd=tmp_path, check=True)
@@ -24,8 +24,8 @@ def test_patch_capture_records_diff_and_detects_protected_changes(tmp_path) -> N
 def test_patch_capture_rejects_evaluator_changes(tmp_path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
-    protected = tmp_path / ".forgebench" / "evaluator"
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=tmp_path, check=True)
+    protected = tmp_path / ".tender" / "evaluator"
     protected.parent.mkdir()
     protected.write_text("before\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
@@ -33,13 +33,13 @@ def test_patch_capture_rejects_evaluator_changes(tmp_path) -> None:
     protected.write_text("tampered\n", encoding="utf-8")
     artifact = PatchCapture().capture(tmp_path)
     assert artifact.valid is False
-    assert artifact.protected_file_changes == (".forgebench/evaluator",)
+    assert artifact.protected_file_changes == (".tender/evaluator",)
 
 
 def test_patch_capture_includes_untracked_files(tmp_path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=tmp_path, check=True)
     (tmp_path / "tracked.txt").write_text("base\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=tmp_path, check=True)

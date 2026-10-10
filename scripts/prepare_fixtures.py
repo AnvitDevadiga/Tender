@@ -7,8 +7,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DATASET = ROOT / "benchmarks" / "tasks.jsonl"
-BASELINE_BRANCH = "forgebench-baseline"
-AUTHOR_NAME = "ForgeBench Fixture Builder"
+BASELINE_BRANCH = "tender-baseline"
+AUTHOR_NAME = "Tender Fixture Builder"
 AUTHOR_EMAIL = "fixtures@example.invalid"
 FIXED_DATE = "@1760000000 +0000"
 
@@ -70,7 +70,7 @@ def prepare(workspace: Path, expected_commit: str) -> str:
         "commit",
         "--quiet",
         "-m",
-        "ForgeBench deterministic fixture baseline",
+        "Tender deterministic fixture baseline",
         env=commit_env,
     )
     actual = run_git(workspace, "rev-parse", "HEAD")

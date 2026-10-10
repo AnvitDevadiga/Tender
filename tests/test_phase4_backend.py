@@ -2,12 +2,12 @@ import subprocess
 
 import pytest
 
-from forgebench.artifacts import ArtifactStore
-from forgebench.models import BenchmarkConfig, EvaluationRun, Issue, RunStatus
-from forgebench.providers import ModelResponse
-from forgebench.services import RunService
-from forgebench.state import WorkflowState
-from forgebench.store import RunStore
+from tender.artifacts import ArtifactStore
+from tender.models import BenchmarkConfig, EvaluationRun, Issue, RunStatus
+from tender.providers import ModelResponse
+from tender.services import RunService
+from tender.state import WorkflowState
+from tender.store import RunStore
 
 
 class FixProvider:
@@ -31,7 +31,7 @@ def make_repo(path) -> None:
     (path / "app.py").write_text("return 1\n", encoding="utf-8")
     subprocess.run(["git", "init", "-q"], cwd=path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=path, check=True)
     subprocess.run(["git", "add", "."], cwd=path, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=path, check=True)
 

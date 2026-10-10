@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Protocol
 
 MAX_COMMAND_OUTPUT_BYTES = 64 * 1024
-_OUTPUT_TRUNCATION_MARKER = b"\n...[ForgeBench output truncated]"
+_OUTPUT_TRUNCATION_MARKER = b"\n...[Tender output truncated]"
 
 
 def _run_bounded(
@@ -170,7 +170,7 @@ class DockerSandbox:
         cpus: str = "2",
     ) -> None:
         self.root = Path(root).resolve()
-        self.image = image or os.getenv("FORGEBENCH_SANDBOX_IMAGE", "python:3.12-slim")
+        self.image = image or os.getenv("TENDER_SANDBOX_IMAGE", "python:3.12-slim")
         self.timeout_seconds = timeout_seconds
         self.memory = memory
         self.cpus = cpus
@@ -181,7 +181,7 @@ class DockerSandbox:
         """Create and initialize the isolated workspace once for this attempt."""
         if self.container_id:
             return
-        self._temp_dir = tempfile.TemporaryDirectory(prefix="forgebench-docker-")
+        self._temp_dir = tempfile.TemporaryDirectory(prefix="tender-docker-")
         cidfile = Path(self._temp_dir.name) / "container-id"
         create_command = [
             "docker",

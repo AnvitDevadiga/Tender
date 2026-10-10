@@ -3,11 +3,11 @@ import subprocess
 
 import pytest
 
-from forgebench.models import Issue
-from forgebench.patches import PatchCapture
-from forgebench.providers import ModelResponse, ToolCall
-from forgebench.sandbox import SandboxUnavailable
-from forgebench.workflow import AgentPlan, AgentWorkflow
+from tender.models import Issue
+from tender.patches import PatchCapture
+from tender.providers import ModelResponse, ToolCall
+from tender.sandbox import SandboxUnavailable
+from tender.workflow import AgentPlan, AgentWorkflow
 
 
 class PatchProvider:
@@ -58,7 +58,7 @@ async def test_provider_retry_handles_one_rate_limit(monkeypatch) -> None:
         delays.append(_seconds)
         return None
 
-    monkeypatch.setattr("forgebench.workflow.asyncio.sleep", no_wait)
+    monkeypatch.setattr("tender.workflow.asyncio.sleep", no_wait)
     provider = RateLimitedOnceProvider()
     workflow = AgentWorkflow(provider)
     result = await workflow._generate_with_provider_retry([])
@@ -74,7 +74,7 @@ async def test_provider_retry_parses_millisecond_rate_limit(monkeypatch) -> None
     async def no_wait(seconds: float) -> None:
         delays.append(seconds)
 
-    monkeypatch.setattr("forgebench.workflow.asyncio.sleep", no_wait)
+    monkeypatch.setattr("tender.workflow.asyncio.sleep", no_wait)
 
     class MillisecondRateLimitProvider:
         calls = 0
@@ -180,7 +180,7 @@ def test_static_analysis_rejects_whitespace_errors(tmp_path) -> None:
 async def test_workflow_applies_patch_and_grades(tmp_path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=tmp_path, check=True)
     (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=tmp_path, check=True)
@@ -218,7 +218,7 @@ async def test_workflow_applies_patch_and_grades(tmp_path) -> None:
 async def test_workflow_executes_and_audits_structured_repository_tool_calls(tmp_path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=tmp_path, check=True)
     (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=tmp_path, check=True)
@@ -255,7 +255,7 @@ async def test_workflow_executes_and_audits_structured_repository_tool_calls(tmp
 async def test_workflow_stops_retrying_when_docker_is_unavailable(tmp_path, monkeypatch) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=tmp_path, check=True)
     (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=tmp_path, check=True)
@@ -271,7 +271,7 @@ async def test_workflow_stops_retrying_when_docker_is_unavailable(tmp_path, monk
             pass
 
     monkeypatch.setattr(
-        "forgebench.workflow.create_sandbox",
+        "tender.workflow.create_sandbox",
         lambda root, backend, timeout_seconds: MissingDocker(),
     )
     provider = PatchProvider()
@@ -294,7 +294,7 @@ async def test_workflow_stops_retrying_when_docker_is_unavailable(tmp_path, monk
 async def test_workflow_retries_a_malformed_plan_once(tmp_path) -> None:
     subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
     subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
-    subprocess.run(["git", "config", "user.name", "ForgeBench Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Tender Test"], cwd=tmp_path, check=True)
     (tmp_path / "app.py").write_text("return 1\n", encoding="utf-8")
     subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
     subprocess.run(["git", "commit", "-qm", "initial"], cwd=tmp_path, check=True)

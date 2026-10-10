@@ -1,6 +1,6 @@
-from forgebench.experiments import ExperimentManifest
-from forgebench.failures import failure_counts
-from forgebench.metrics import summarize
+from tender.experiments import ExperimentManifest
+from tender.failures import failure_counts
+from tender.metrics import summarize
 
 
 def test_manifest_and_metrics() -> None:

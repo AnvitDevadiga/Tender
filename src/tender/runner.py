@@ -86,7 +86,7 @@ async def run_experiment(
                 if remaining <= 0:
                     budget_exhausted = True
                     break
-                with tempfile.TemporaryDirectory(prefix="forgebench-") as temp_dir:
+                with tempfile.TemporaryDirectory(prefix="tender-") as temp_dir:
                     source_workspace = Path(task.workspace)
                     if not source_workspace.is_absolute() and not source_workspace.exists():
                         source_workspace = dataset_root / source_workspace
@@ -151,7 +151,7 @@ async def run_experiment(
                         ),
                         max_output_tokens=manifest.max_tokens,
                     )
-                    store = RunStore(output_path.parent / ".forgebench-runs.db")
+                    store = RunStore(output_path.parent / ".tender-runs.db")
                     service = RunService(
                         provider=provider_for(config),
                         store=store,

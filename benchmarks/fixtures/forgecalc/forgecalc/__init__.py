@@ -1,1 +1,1 @@
-"""Tiny arithmetic library used as a ForgeBench fixture."""
+"""Tiny arithmetic library used as a Tender fixture."""

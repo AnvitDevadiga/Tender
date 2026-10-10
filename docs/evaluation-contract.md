@@ -1,6 +1,6 @@
-# ForgeBench evaluation contract
+# Tender evaluation contract
 
-This document defines what ForgeBench is allowed to claim.
+This document defines what Tender is allowed to claim.
 
 ## Required identity
 

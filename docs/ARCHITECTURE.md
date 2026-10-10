@@ -1,8 +1,8 @@
-# ForgeBench Architecture
+# Tender Architecture
 
 ## Current implementation
 
-ForgeBench is currently a single-process FastAPI application. The API delegates run creation to `RunService`; provider selection is handled by the runtime factory. `AgentWorkflow` validates a clean Git base, retrieves bounded text, asks the provider for a structured plan, then runs a bounded structured tool loop or accepts a unified diff. Tool file operations are path-checked; tool commands use the selected sandbox. The workflow runs target tests, static/diff checks, patch review, and exact-patch verification in a second copy. `RunStore` persists run snapshots and append-only events in SQLite. The experiment runner loads a TOML manifest and JSONL tasks, prepares pinned workspace copies, invokes the same service, and stores per-gate artifacts and aggregate output.
+Tender is currently a single-process FastAPI application. The API delegates run creation to `RunService`; provider selection is handled by the runtime factory. `AgentWorkflow` validates a clean Git base, retrieves bounded text, asks the provider for a structured plan, then runs a bounded structured tool loop or accepts a unified diff. Tool file operations are path-checked; tool commands use the selected sandbox. The workflow runs target tests, static/diff checks, patch review, and exact-patch verification in a second copy. `RunStore` persists run snapshots and append-only events in SQLite. The experiment runner loads a TOML manifest and JSONL tasks, prepares pinned workspace copies, invokes the same service, and stores per-gate artifacts and aggregate output.
 
 ```mermaid
 flowchart LR

@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from forgebench.github import GitHubIssueClient
-from forgebench.repository import RepositoryError, RepositoryManager
-from forgebench.sandbox import DockerSandbox
+from tender.github import GitHubIssueClient
+from tender.repository import RepositoryError, RepositoryManager
+from tender.sandbox import DockerSandbox
 
 
 @pytest.mark.parametrize(
@@ -69,7 +69,7 @@ def test_isolated_workspace_copy_removes_local_git_helpers(tmp_path) -> None:
     config = source / ".git" / "config"
     config.write_text(
         config.read_text(encoding="utf-8")
-        + "\n[diff]\n\texternal = touch /tmp/forgebench-unsafe\n",
+        + "\n[diff]\n\texternal = touch /tmp/tender-unsafe\n",
         encoding="utf-8",
     )
 
@@ -104,8 +104,8 @@ def test_docker_timeout_removes_started_container(tmp_path, monkeypatch) -> None
             return None, "partial", "", True
         return 0, "", "", False
 
-    monkeypatch.setattr("forgebench.sandbox.subprocess.run", fake_run)
-    monkeypatch.setattr("forgebench.sandbox._run_bounded", fake_bounded)
+    monkeypatch.setattr("tender.sandbox.subprocess.run", fake_run)
+    monkeypatch.setattr("tender.sandbox._run_bounded", fake_bounded)
     result = DockerSandbox(tmp_path, timeout_seconds=1).run("sleep 10")
 
     assert result.timed_out
@@ -127,8 +127,8 @@ def test_docker_commands_share_one_disposable_container(tmp_path, monkeypatch) -
         calls.append(command)
         return 0, "ok", "", False
 
-    monkeypatch.setattr("forgebench.sandbox.subprocess.run", fake_run)
-    monkeypatch.setattr("forgebench.sandbox._run_bounded", fake_bounded)
+    monkeypatch.setattr("tender.sandbox.subprocess.run", fake_run)
+    monkeypatch.setattr("tender.sandbox._run_bounded", fake_bounded)
     sandbox = DockerSandbox(tmp_path)
     sandbox.run("python3 -m pip install -e .")
     sandbox.run("python3 -m pytest -q")
@@ -142,11 +142,11 @@ def test_docker_commands_share_one_disposable_container(tmp_path, monkeypatch) -
 
 
 def test_docker_sandbox_image_can_be_configured_for_repository_tools(monkeypatch, tmp_path) -> None:
-    monkeypatch.setenv("FORGEBENCH_SANDBOX_IMAGE", "forgebench-sandbox:test")
+    monkeypatch.setenv("TENDER_SANDBOX_IMAGE", "tender-sandbox:test")
 
     sandbox = DockerSandbox(tmp_path)
 
-    assert sandbox.image == "forgebench-sandbox:test"
+    assert sandbox.image == "tender-sandbox:test"
 
 
 @pytest.mark.asyncio
@@ -164,7 +164,7 @@ async def test_github_issue_fetch_rejects_redirect_to_other_host(monkeypatch) ->
         def read(self, size):
             return b"{}"
 
-    monkeypatch.setattr("forgebench.github.request.urlopen", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("tender.github.request.urlopen", lambda *args, **kwargs: Response())
     with pytest.raises(ValueError, match="redirected"):
         await GitHubIssueClient().fetch("https://github.com/owner/repo/issues/1")
 
@@ -184,6 +184,6 @@ async def test_github_issue_fetch_caps_response_size(monkeypatch) -> None:
         def read(self, size):
             return b"x" * size
 
-    monkeypatch.setattr("forgebench.github.request.urlopen", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("tender.github.request.urlopen", lambda *args, **kwargs: Response())
     with pytest.raises(ValueError, match="1 MB limit"):
         await GitHubIssueClient().fetch("https://github.com/owner/repo/issues/1")

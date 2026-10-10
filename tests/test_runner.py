@@ -3,9 +3,9 @@ import subprocess
 
 import pytest
 
-from forgebench.experiments import BenchmarkTask
-from forgebench.providers import ModelResponse
-from forgebench.runner import (
+from tender.experiments import BenchmarkTask
+from tender.providers import ModelResponse
+from tender.runner import (
     compare_experiment_results,
     run_experiment_sync,
     summarize_from_records,
@@ -302,7 +302,7 @@ def test_offline_experiment_runs_setup_patch_and_independent_verification(
                 output_tokens=12,
             )
 
-    monkeypatch.setattr("forgebench.runner.provider_for", lambda config: StaticPatchProvider())
+    monkeypatch.setattr("tender.runner.provider_for", lambda config: StaticPatchProvider())
     output = run_experiment_sync(manifest, dataset, tmp_path / "output" / "result.json")
 
     record = output["runs"][0]

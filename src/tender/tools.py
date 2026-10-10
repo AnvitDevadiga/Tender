@@ -89,8 +89,8 @@ class AgentToolbox:
         "build",
     }
     protected_paths = {
-        ".forgebench/evaluator",
-        ".forgebench/benchmark.toml",
+        ".tender/evaluator",
+        ".tender/benchmark.toml",
         "benchmarks/tasks.jsonl",
     }
     dependency_files = {
@@ -240,7 +240,7 @@ class AgentToolbox:
         target.parent.mkdir(parents=True, exist_ok=True)
         payload = content.encode("utf-8")
         file_mode = (target.stat().st_mode & 0o777) if target.exists() else 0o644
-        fd, temporary = tempfile.mkstemp(prefix=".forgebench-write-", dir=target.parent)
+        fd, temporary = tempfile.mkstemp(prefix=".tender-write-", dir=target.parent)
         try:
             with os.fdopen(fd, "wb") as output:
                 output.write(payload)

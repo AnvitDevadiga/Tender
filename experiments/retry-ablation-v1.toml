@@ -1,5 +1,5 @@
 name = "retry-ablation-v1"
-dataset = "forgebench-dev-v1"
+dataset = "tender-dev-v1"
 description = "Measure whether failure-aware retries justify their extra cost."
 model = "groq/openai/gpt-oss-20b"
 architecture = "single-agent"

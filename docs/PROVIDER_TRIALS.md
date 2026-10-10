@@ -17,7 +17,7 @@ The API accepted the ForgeCalc percentage task at base commit `6e1bb1322e0caffeb
 | Patch | Empty; no source change was applied |
 | Failure | Groq HTTP 429 token-per-minute limit (8,000 TPM); retry delay was honored |
 
-Earlier attempts exposed Groq's rejection of empty-root `list_directory` tool calls. ForgeBench removed that tool from the Groq tool menu, after which the provider used search/read tools correctly. The recorded failed attempts remain in the local SQLite store and artifact directory; they are development traces, not benchmark successes.
+Earlier attempts exposed Groq's rejection of empty-root `list_directory` tool calls. Tender removed that tool from the Groq tool menu, after which the provider used search/read tools correctly. The recorded failed attempts remain in the local SQLite store and artifact directory; they are development traces, not benchmark successes.
 
 ## Interpretation
 
@@ -27,7 +27,7 @@ This is evidence that API enqueueing, worker claiming, disposable-workspace crea
 
 On 2026-10-09, run `d1b6728a-ef97-4b93-8b6e-83fde7c4638a` used the narrowed percentage-only test command. The model changed only the percentage behavior and its task-specific pytest passed. The run then failed because `git diff --check HEAD` could not access Git metadata after sandbox grading. The gate now checks added patch lines directly.
 
-Two follow-up runs after Docker access was restored, `acfdb30d-ab3d-4d59-92b5-2149929d62d9` and `58fa9007-6971-4b3c-a409-00ab7de56866`, failed plan parsing with zero usage. Their run configuration omitted the `groq/` provider prefix, so they selected the offline provider instead of Groq. ForgeBench also now requests Groq JSON mode for planning, accepts a JSON object surrounded by commentary, and retries one malformed plan once while keeping schema and path validation. Groq documents JSON mode in its [Chat Completions API reference](https://console.groq.com/docs/api-reference).
+Two follow-up runs after Docker access was restored, `acfdb30d-ab3d-4d59-92b5-2149929d62d9` and `58fa9007-6971-4b3c-a409-00ab7de56866`, failed plan parsing with zero usage. Their run configuration omitted the `groq/` provider prefix, so they selected the offline provider instead of Groq. Tender also now requests Groq JSON mode for planning, accepts a JSON object surrounded by commentary, and retries one malformed plan once while keeping schema and path validation. Groq documents JSON mode in its [Chat Completions API reference](https://console.groq.com/docs/api-reference).
 
 The correctly selected provider run, `3f089cc3-f30b-49ff-98c6-fcc468e9f5a0`, used `groq/openai/gpt-oss-20b`, made the percentage fix, and passed the task-specific test. Its clean-copy check found that verification imported `percentage` from the package root, which does not export it. All fixture verification commands now import from `forgecalc.calculator`.
 

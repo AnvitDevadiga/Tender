@@ -11,7 +11,7 @@ This plan preserves the existing Python evaluation loop and upgrades it in revie
 - Phase 4 repository understanding and tools: bounded lexical ranking, capped Python AST symbol-definition matches, selection rationale, repository maps, and untrusted-content framing implemented. The provider now has a bounded structured tool loop with typed file, search, Git, dependency, test, lint, and sandboxed command tools, including path/secret/evaluator protections and redacted call auditing. Dependency-graph expansion and symbol indexing for other languages remain open.
 - Phase 5 control plane: API run creation atomically persists a queued run and audit event, then returns. A separate worker atomically claims the oldest queued run, rechecks its relative workspace under the configured root, renews a lease, and executes it. SQLite schema migration, concurrent claims, expiry recovery without replay, and stale-owner write fencing are implemented. Local Compose separates the API from the Docker-socket worker and shares state/artifacts/workspaces. PostgreSQL/migrations, workflow checkpoint resume, cancellation, general API authentication, quotas, role-based approvals, and plan approvals remain open. A local dashboard exists; this is not a full product UI.
 - Phase 6 deployment/research: the source is pushed to the supplied public GitHub repository, CI passes, and the interactive recorded-run portfolio demo is live through GitHub Pages. An 18-run exploratory Groq experiment now covers three unique tasks at retry budgets 0/1/2; broader independent task coverage and configuration comparisons remain open. Final name/UI guidance and public code execution remain open.
-- Public project name: Tender. Internal Python package and repository names remain `forgebench` / `ForgeBench` for now.
+- Public project name: Tender. Internal Python package and repository names remain `tender` / `Tender` for now.
 
 ## Phase 0 — audit and contract
 
@@ -67,7 +67,7 @@ This plan preserves the existing Python evaluation loop and upgrades it in revie
 - Run pinned datasets across multiple configurations with repeated trials; publish raw artifacts, uncertainty/sample size, command, manifest/dataset hashes, and actual results.
 - Add a curated demo with strict quotas only after abuse and isolation tests pass.
 
-The recorded-run interactive portfolio deliverable is live at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/). It demonstrates the project and links to source without implying that a public code-execution service exists.
+The recorded-run interactive portfolio deliverable is live at [anvitdevadiga.github.io/Tender](https://anvitdevadiga.github.io/tender/). It demonstrates the project and links to source without implying that a public code-execution service exists.
 
 ## Definition of done gates
 

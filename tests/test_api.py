@@ -1,9 +1,9 @@
 import pytest
 from fastapi.testclient import TestClient
 
-from forgebench import api as api_module
-from forgebench.api import app
-from forgebench.models import (
+from tender import api as api_module
+from tender.api import app
+from tender.models import (
     BenchmarkConfig,
     EvaluationRun,
     FailureCategory,
@@ -11,9 +11,9 @@ from forgebench.models import (
     RunEvent,
     RunStatus,
 )
-from forgebench.services import RunService
-from forgebench.state import WorkflowState
-from forgebench.store import RunStore
+from tender.services import RunService
+from tender.state import WorkflowState
+from tender.store import RunStore
 
 client = TestClient(app)
 
@@ -59,7 +59,7 @@ def test_run_requires_a_repository_workspace_before_persisting() -> None:
 
 
 def test_human_approval_requires_server_token_before_reserving_run(monkeypatch) -> None:
-    monkeypatch.delenv("FORGEBENCH_APPROVAL_TOKEN", raising=False)
+    monkeypatch.delenv("TENDER_APPROVAL_TOKEN", raising=False)
     response = client.post(
         "/runs",
         json={
@@ -74,7 +74,7 @@ def test_human_approval_requires_server_token_before_reserving_run(monkeypatch) 
 
 def test_final_approval_is_authenticated_atomic_and_audited(monkeypatch) -> None:
     token = "test-only-approval-token-that-is-long-enough-123"
-    monkeypatch.setenv("FORGEBENCH_APPROVAL_TOKEN", token)
+    monkeypatch.setenv("TENDER_APPROVAL_TOKEN", token)
     run = EvaluationRun(
         issue=Issue(repository="local/repo", title="Review patch"),
         config=BenchmarkConfig(require_human_approval=True),
@@ -229,7 +229,7 @@ def test_idempotency_key_returns_original_run_without_second_execution(
 def test_worker_claims_queued_run_and_executes_it(tmp_path, monkeypatch) -> None:
     import asyncio
 
-    from forgebench.worker import run_one
+    from tender.worker import run_one
 
     install_fake_workflow(monkeypatch, tmp_path)
     response = client.post(
@@ -258,7 +258,7 @@ def test_worker_claims_queued_run_and_executes_it(tmp_path, monkeypatch) -> None
 def test_worker_heartbeat_keeps_long_running_claim_live(tmp_path, monkeypatch) -> None:
     import asyncio
 
-    from forgebench.worker import run_one
+    from tender.worker import run_one
 
     tmp_path.mkdir(exist_ok=True)
     api_module.workspace_root = tmp_path.resolve()
@@ -287,9 +287,9 @@ def test_worker_heartbeat_keeps_long_running_claim_live(tmp_path, monkeypatch) -
 def test_worker_rejects_queued_workspace_outside_its_root(tmp_path) -> None:
     import asyncio
 
-    from forgebench.worker import run_one
+    from tender.worker import run_one
 
-    outside = tmp_path.parent / "outside-forgebench"
+    outside = tmp_path.parent / "outside-tender"
     outside.mkdir(exist_ok=True)
     run = EvaluationRun(
         issue=Issue(repository="local/repo", title="Path escape"),

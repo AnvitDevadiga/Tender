@@ -18,7 +18,7 @@ async def _check_groq() -> int:
         return 2
     try:
         response = await GroqProvider().generate(
-            [{"role": "user", "content": "Reply with exactly: ForgeBench ready"}]
+            [{"role": "user", "content": "Reply with exactly: Tender ready"}]
         )
     except Exception as exc:  # provider errors should be visible without exposing credentials
         print(f"Groq request failed: {type(exc).__name__}: {exc}")
@@ -28,7 +28,7 @@ async def _check_groq() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="forgebench")
+    parser = argparse.ArgumentParser(prog="tender")
     parser.add_argument(
         "command",
         choices=["check-groq", "run-experiment", "validate-benchmark", "compare", "worker"],
