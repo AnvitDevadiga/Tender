@@ -1,8 +1,8 @@
-# ForgeBench (working name)
+# Tender
 
-![ForgeBench](assets/forgebench-wordmark.svg)
+![Tender](assets/tender-wordmark.svg)
 
-ForgeBench is the current working name for an evaluation-first platform for autonomous software engineering agents. The final project name will be chosen later. It is designed to answer experimental questions about agent architecture, retrieval, context, retries, cost, and failure modes—not merely to expose a coding-agent demo.
+Tender is an evaluation-first platform for autonomous software engineering agents. It is designed to answer experimental questions about agent architecture, retrieval, context, retries, cost, and failure modes—not merely to expose a coding-agent demo. The Python package and GitHub repository retain their original `forgebench` names for now.
 
 ## Current status
 
@@ -70,7 +70,7 @@ Copy [`.env.example`](.env.example) to `.env`, edit the local values, then expor
 
 ## Free static portfolio demo
 
-The interactive recorded-run demo is live at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/). It replays a verified local run and exploratory repeated-trial results; it does not accept tasks, expose the API, or execute submitted code. The [`Deploy portfolio demo` workflow](.github/workflows/deploy-demo.yml) republishes it when `demo/` changes. GitHub Pages is available for public repositories on GitHub Free; see [GitHub's Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+The interactive recorded-run demo is live at [the current GitHub Pages address](https://anvitdevadiga.github.io/ForgeBench/). It replays a verified local run and exploratory repeated-trial results; it does not accept tasks, expose the API, or execute submitted code. The [`Deploy portfolio demo` workflow](.github/workflows/deploy-demo.yml) republishes it when `demo/` changes. GitHub Pages is available for public repositories on GitHub Free; see [GitHub's Pages documentation](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
 
 Or run the API with Docker Compose:
 

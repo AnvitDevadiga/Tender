@@ -57,6 +57,6 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 
 ## Demo and cost
 
-The portfolio page in `demo/index.html` interactively replays a recorded successful run and repeated-trial summary; it does not accept tasks or run submitted code. It is published through GitHub Pages at [anvitdevadiga.github.io/ForgeBench](https://anvitdevadiga.github.io/ForgeBench/) at no hosting cost for this public repository. Final project naming and website design remain with the user.
+The portfolio page in `demo/index.html` uses the Tender name and a monochrome editorial design. It interactively replays a recorded successful run and repeated-trial summary; it does not accept tasks or run submitted code. It is published through GitHub Pages at [the current Pages address](https://anvitdevadiga.github.io/ForgeBench/). The custom domain remains deferred.
 
 Local tests and manifest checks need no API key. A real model call needs a provider key and is subject to that provider's current limits and billing terms. Public interactive code execution is intentionally not available until authentication, quotas, worker separation, persistence, and stronger isolation are built and tested.

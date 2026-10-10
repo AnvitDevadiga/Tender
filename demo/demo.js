@@ -41,6 +41,7 @@ function showStep(index) {
   const summary = document.createElement("p");
   summary.textContent = step.summary;
   const evidence = document.createElement("p");
+  evidence.className = "trace-evidence";
   evidence.textContent = step.evidence;
   detail.append(state, heading, summary, evidence);
 }
@@ -50,7 +51,8 @@ function renderSteps(data) {
     const button = document.createElement("button");
     button.className = "trace-step";
     button.type = "button";
-    button.textContent = `${String(index + 1).padStart(2, "0")}  ${step.title}`;
+    button.dataset.step = String(index + 1).padStart(2, "0");
+    button.textContent = step.title;
     button.setAttribute("aria-current", "false");
     button.addEventListener("click", () => {
       stopPlayback();

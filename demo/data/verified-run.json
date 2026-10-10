@@ -22,7 +22,7 @@
     {
       "title": "Inspect the repository",
       "state": "Repository analysis → retrieval",
-      "summary": "ForgeBench mapped the small Python repository and selected relevant source and test excerpts.",
+      "summary": "Tender mapped the small Python repository and selected relevant source and test excerpts.",
       "evidence": "The run trace records repository analysis, retrieval results, and selected files."
     },
     {
@@ -46,7 +46,7 @@
     {
       "title": "Review and verify the exact patch",
       "state": "Quality gates passed",
-      "summary": "Whitespace and patch-scope checks passed. ForgeBench applied the same patch to a second clean copy and checked expected percentage values.",
+      "summary": "Whitespace and patch-scope checks passed. Tender applied the same patch to a second clean copy and checked expected percentage values.",
       "evidence": "The independent clean-copy check passed. The configured source checkout remained unchanged."
     },
     {

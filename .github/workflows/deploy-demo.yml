@@ -5,7 +5,6 @@ on:
     branches: [main]
     paths:
       - demo/**
-      - assets/favicon.svg
       - .github/workflows/deploy-demo.yml
   workflow_dispatch:
 
@@ -34,8 +33,6 @@ jobs:
           mkdir -p _site/docs/experiments
           cp docs/experiments/groq-retry-ablation-3tasks-v1.json _site/docs/experiments/
           cp docs/PROVIDER_TRIALS.md _site/docs/PROVIDER_TRIALS.md
-          mkdir -p _site/assets
-          cp assets/favicon.svg _site/assets/favicon.svg
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
