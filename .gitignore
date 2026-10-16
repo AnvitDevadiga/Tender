@@ -5,6 +5,8 @@ __pycache__/
 .DS_Store
 tender.db
 *.db
+*.db-wal
+*.db-shm
 artifacts/
 results/
 .env

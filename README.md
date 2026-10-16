@@ -21,7 +21,7 @@ Tender is a local-first platform for evaluating coding agents. It gives an agent
 - Independent verification: every claimed success is re-run from a clean repository copy with the exact patch applied.
 - Cancellation: queued runs can be cancelled atomically; workers never pick them up.
 - Provider adapters: Groq and any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM, Ollama, ...) behind one typed tool-calling boundary; retries cover rate limits, transient 5xx responses, and network timeouts.
-- Operable API: paginated and filterable run listing with a `summary=true` mode that drops patch, test-output, and issue-body payloads; paginated event timelines (5000 events per page by default, 20000 maximum); latency percentiles and per-model metrics; readiness checks; an optional bearer token for run creation and cancellation; and a request-size cap.
+- Operable API: paginated and filterable run listing with a `summary=true` mode that drops patch, test-output, and issue-body payloads and an `X-Total-Count` header for honest pagination; paginated event timelines (5000 events per page by default, 20000 maximum); latency percentiles and per-model metrics; readiness checks; an optional bearer token for run creation and cancellation; a request-size cap; a disabled-by-default per-client rate limit for mutating routes; and conservative security headers with a strict dashboard CSP.
 
 ## Try it locally
 
@@ -45,7 +45,7 @@ Start the local API and run explorer:
 uvicorn tender.api:app --reload
 ```
 
-Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). For Docker-backed queued runs, see [Local deployment](docs/DEPLOYMENT.md) and [Security](docs/SECURITY.md). The API is a development prototype; it is not a public arbitrary-code execution service.
+Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). The dashboard is a command-center explorer: keyboard shortcuts with a ⌘K command palette, status/model/benchmark filters, a tabbed run inspector with patch diffs and timelines, up to four-run comparison, JSON/CSV export, and adaptive live refresh. It is a local inspection tool served as zero-build ES modules, not a multi-user product UI. For Docker-backed queued runs, see [Local deployment](docs/DEPLOYMENT.md) and [Security](docs/SECURITY.md). The API is a development prototype; it is not a public arbitrary-code execution service.
 
 ## Live demo and current evidence
 
@@ -55,7 +55,7 @@ The [public demo](https://anvitdevadiga.github.io/tender/) replays a recorded ru
 
 - `src/tender/` — API, workflow, providers, sandbox, persistence, and benchmark runner
 - `benchmarks/` and `experiments/` — pinned tasks and experiment configurations
-- `dashboard/` — local run explorer
+- `dashboard/` — local run explorer (zero-build ES modules: `index.html`, `styles.css`, `app.js`)
 - `demo/` — read-only public portfolio demo
 - `docs/` — architecture, evaluation contract, security, and operating notes
 - `assets/` — monochrome brand and diagram assets (SVG and transparent PNG)

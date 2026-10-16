@@ -3,11 +3,12 @@ import hmac
 import json
 import math
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Response
 from fastapi.staticfiles import StaticFiles
 
 from .github import GitHubIssueClient
@@ -66,7 +67,11 @@ class RequestSizeLimitMiddleware:
             if not delivered:
                 delivered = True
                 return {"type": "http.request", "body": bytes(body), "more_body": False}
-            return {"type": "http.disconnect"}
+            # Hand control back to the real receive channel: synthesizing an
+            # immediate ``http.disconnect`` makes streaming responses (for
+            # example StaticFiles) abort with an empty body, because they
+            # listen for disconnects while sending.
+            return await receive()
 
         await self.app(scope, replay, send)
 
@@ -85,6 +90,111 @@ class RequestSizeLimitMiddleware:
             }
         )
         await send({"type": "http.response.body", "body": payload})
+
+
+class RateLimitMiddleware:
+    """Token-bucket throttle for mutating requests; disabled by default.
+
+    ``TENDER_RATE_LIMIT_PER_MINUTE`` sets the sustained per-client rate (0 or
+    unset disables the limiter) and ``TENDER_RATE_LIMIT_BURST`` the bucket
+    size. Rejections return HTTP 429 with ``Retry-After``. Buckets are
+    in-process and per-client-host; a distributed deployment still needs
+    shared quotas.
+    """
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+        self._buckets: dict[str, tuple[float, float]] = {}
+        self._last_prune = 0.0
+
+    @staticmethod
+    def _config() -> tuple[int, int]:
+        try:
+            per_minute = max(0, int(os.getenv("TENDER_RATE_LIMIT_PER_MINUTE", "0")))
+        except ValueError:
+            per_minute = 0
+        try:
+            burst = int(os.getenv("TENDER_RATE_LIMIT_BURST", str(max(1, per_minute or 10))))
+        except ValueError:
+            burst = 10
+        return per_minute, max(1, burst)
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        per_minute, burst = self._config()
+        if (
+            scope["type"] != "http"
+            or per_minute == 0
+            or scope.get("method") not in {"POST", "PUT", "PATCH", "DELETE"}
+        ):
+            await self.app(scope, receive, send)
+            return
+        client = scope.get("client") or ("unknown", 0)
+        key = str(client[0])
+        now = time.monotonic()
+        tokens, last = self._buckets.get(key, (float(burst), now))
+        tokens = min(float(burst), tokens + (now - last) * per_minute / 60.0)
+        if tokens < 1.0:
+            self._buckets[key] = (tokens, now)
+            await self._reject(send, per_minute, tokens)
+            return
+        self._buckets[key] = (tokens - 1.0, now)
+        self._prune(now)
+        await self.app(scope, receive, send)
+
+    def _prune(self, now: float) -> None:
+        if len(self._buckets) < 1024 or now - self._last_prune < 60.0:
+            return
+        self._last_prune = now
+        stale = now - 600.0
+        self._buckets = {key: value for key, value in self._buckets.items() if value[1] >= stale}
+
+    async def _reject(self, send: Any, per_minute: int, tokens: float) -> None:
+        wait = max(1.0, (1.0 - tokens) * 60.0 / per_minute)
+        payload = json.dumps({"detail": f"rate limit exceeded; retry in {wait:.0f}s"}).encode(
+            "utf-8"
+        )
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 429,
+                "headers": [
+                    (b"content-type", b"application/json"),
+                    (b"retry-after", f"{wait:.0f}".encode("ascii")),
+                    (b"content-length", str(len(payload)).encode("ascii")),
+                ],
+            }
+        )
+        await send({"type": "http.response.body", "body": payload})
+
+
+DASHBOARD_CSP = (
+    "default-src 'self'; base-uri 'none'; frame-ancestors 'none'; "
+    "img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'"
+)
+
+
+class SecurityHeadersMiddleware:
+    """Attach conservative security headers; the dashboard also gets a strict CSP."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_headers(message: dict[str, Any]) -> None:
+            if message["type"] == "http.response.start":
+                headers = message.setdefault("headers", [])
+                headers.append((b"x-content-type-options", b"nosniff"))
+                headers.append((b"x-frame-options", b"DENY"))
+                headers.append((b"referrer-policy", b"no-referrer"))
+                if scope.get("path", "").startswith("/dashboard"):
+                    headers.append((b"content-security-policy", DASHBOARD_CSP.encode("latin-1")))
+            await send(message)
+
+        await self.app(scope, receive, send_with_headers)
 
 
 def _require_api_token(authorization: str | None) -> None:
@@ -114,6 +224,8 @@ app.add_middleware(
         int(os.getenv("TENDER_MAX_REQUEST_BYTES", str(MAX_REQUEST_BYTES_DEFAULT))),
     ),
 )
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecurityHeadersMiddleware)
 workspace_root_value = os.getenv("TENDER_WORKSPACE_ROOT")
 workspace_root = Path(workspace_root_value).expanduser().resolve() if workspace_root_value else None
 dashboard_path = Path(__file__).resolve().parents[2] / "dashboard"
@@ -155,6 +267,7 @@ async def import_github_issue(request: GitHubIssueRequest) -> Issue:
 
 @app.get("/runs", response_model=list[EvaluationRun])
 async def list_runs(
+    response: Response,
     limit: int = Query(default=100, ge=1, le=1000),
     offset: int = Query(default=0, ge=0),
     status: RunStatus | None = Query(default=None),
@@ -164,6 +277,7 @@ async def list_runs(
     ),
 ) -> list[EvaluationRun]:
     runs = service.store.list_runs(limit, offset=offset, status=status)
+    response.headers["X-Total-Count"] = str(service.store.count_runs(status))
     if summary:
         runs = [
             run.model_copy(

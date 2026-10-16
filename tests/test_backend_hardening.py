@@ -418,6 +418,55 @@ def test_benchmark_dataset_rejects_duplicate_task_ids(tmp_path) -> None:
         BenchmarkTask.load_jsonl(path)
 
 
+def test_run_list_reports_total_count_header() -> None:
+    make_queued_run("First")
+    cancelled = make_queued_run("Second")
+    api_module.service.store.cancel_run(str(cancelled.id))
+
+    page = client.get("/runs", params={"limit": 1})
+    filtered = client.get("/runs", params={"status": "cancelled"})
+
+    assert page.headers["x-total-count"] == "2"
+    assert len(page.json()) == 1
+    assert filtered.headers["x-total-count"] == "1"
+
+
+def test_mutating_routes_are_rate_limited_when_configured(monkeypatch) -> None:
+    monkeypatch.setenv("TENDER_RATE_LIMIT_PER_MINUTE", "60")
+    monkeypatch.setenv("TENDER_RATE_LIMIT_BURST", "1")
+    run = make_queued_run()
+
+    first = client.post(f"/runs/{run.id}/cancel")
+    second = client.post(f"/runs/{run.id}/cancel")
+    read = client.get("/runs")
+
+    assert first.status_code == 200
+    assert second.status_code == 429
+    assert int(second.headers["Retry-After"]) >= 1
+    assert "rate limit exceeded" in second.json()["detail"]
+    assert read.status_code == 200  # read routes stay available
+
+
+def test_rate_limiting_stays_disabled_by_default(monkeypatch) -> None:
+    monkeypatch.delenv("TENDER_RATE_LIMIT_PER_MINUTE", raising=False)
+    run = make_queued_run()
+
+    for _ in range(3):
+        assert client.get("/runs").status_code == 200
+    assert client.post(f"/runs/{run.id}/cancel").status_code == 200
+
+
+def test_security_headers_and_dashboard_csp() -> None:
+    health = client.get("/health")
+    dashboard = client.get("/dashboard/")
+
+    assert health.headers["x-content-type-options"] == "nosniff"
+    assert health.headers["x-frame-options"] == "DENY"
+    assert health.headers["referrer-policy"] == "no-referrer"
+    assert "content-security-policy" not in health.headers
+    assert "default-src 'self'" in dashboard.headers["content-security-policy"]
+
+
 def test_manifest_requires_identity_fields(tmp_path) -> None:
     path = tmp_path / "manifest.toml"
     path.write_text(

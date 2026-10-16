@@ -650,6 +650,17 @@ class RunStore:
             rows = db.execute(query, parameters).fetchall()
         return [_decode_run(row["payload"]) for row in rows]
 
+    def count_runs(self, status: RunStatus | None = None) -> int:
+        """Count persisted runs, optionally scoped to one status."""
+        query = "SELECT COUNT(*) AS total FROM runs"
+        parameters: list[object] = []
+        if status is not None:
+            query += " WHERE status = ?"
+            parameters.append(status.value)
+        with self._connect() as db:
+            row = db.execute(query, parameters).fetchone()
+        return int(row["total"])
+
     def append_event(self, event: RunEvent) -> None:
         with self._connect() as db:
             db.execute(

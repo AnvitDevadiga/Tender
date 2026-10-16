@@ -39,19 +39,21 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 - The worker responds to SIGINT/SIGTERM by finishing the in-flight run before exiting (a second stop signal exits immediately so a stuck run can be abandoned), spaces out lease-recovery scans to avoid idle write-lock churn, and the workflow's stored test output is bounded while full gate output remains in run artifacts.
 - Local Compose separates API, worker, and sandbox images. Only the worker receives the Docker socket; SQLite state, artifacts, fixtures, and a host-visible temporary directory are shared. Workers maintain expiring database leases, heartbeat while running, and fail expired runs without replay; stale owners are fenced from writing run state.
 - Benchmark verification applies the final agent patch to a second clean task copy; separate fixture assertions support regression-free-rate measurement. Versioned experiment output includes manifest/dataset provenance, trial design, per-retry-budget latency/attempt summaries, patch size, and warnings for fewer than 30 unique tasks. Comparisons require complete experiments with matching dataset hash, task cohort, retry budgets, and repetition count, and report per-task outcomes.
-- Local run explorer dashboard, CI workflow, setup/deployment notes, and a separate static portfolio page with a GitHub Pages workflow.
+- The dashboard is a zero-build command-center explorer (`dashboard/index.html` + `styles.css` + one ES module `app.js`, JSDoc-typed and verified with `tsc --checkJs` in strict mode via `dashboard/jsconfig.json`): status/model/benchmark filters with counts, sorting, debounced search, keyboard shortcuts and a ⌘K command palette, a tabbed run inspector (overview, timeline, patch diff, test output, artifacts) with queued-run cancellation, up to four-run comparison, JSON/CSV export, shareable URL state, light/dark themes, skeleton/error/empty states, and adaptive live refresh. It reads the summary list endpoint plus the `X-Total-Count` header for honest pagination. CI workflow, setup/deployment notes, and a separate static portfolio page with a GitHub Pages workflow remain in place.
 
 ## Not implemented yet
 
 - LangGraph orchestration, MCP interoperability, dependency-graph expansion, symbol-aware retrieval outside Python, and plan approval.
 - Plan approval, GitHub PR creation, and role-based approval identity/permissions.
-- PostgreSQL/migrations, workflow checkpoint resume, and public-run identity, authorization, quotas, and rate limits. The optional `TENDER_API_TOKEN` gate is a server-side shared secret, not multi-user auth.
+- PostgreSQL/migrations, workflow checkpoint resume, and public-run identity, authorization, per-user quotas, and distributed rate limits. The optional `TENDER_API_TOKEN` gate is a server-side shared secret, not multi-user auth, and the in-process token-bucket limiter (`TENDER_RATE_LIMIT_PER_MINUTE`) only throttles mutating routes within a single process.
 - Broad, independently sampled benchmark evidence. One small repeated Groq fixture experiment completed; see [provider trial record](PROVIDER_TRIALS.md).
 - The project is connected to the supplied public GitHub repository. Source is pushed to `main`; the interactive recorded-run demo is live at [anvitdevadiga.github.io/Tender](https://anvitdevadiga.github.io/tender/).
 
 ## Verification
 
-- `pytest -q`: 142 passed, with one Starlette/httpx deprecation warning. The hardening pass added 37 regression tests covering cancellation, pagination, request caps, API-token gating, provider selection, retry classification, legacy-payload clamping, reasoning-model temperature handling, and worker stop signals.
+- `pytest -q`: 149 passed, with one Starlette/httpx deprecation warning. The hardening pass added 41 regression tests covering cancellation, pagination, request caps, API-token gating, provider selection, retry classification, legacy-payload clamping, reasoning-model temperature handling, worker stop signals, rate limiting, count headers, and security headers — plus three dashboard smoke tests covering static asset serving, JavaScript/CSS content types, and the no-inline-code CSP contract.
+- A static-serving regression was found and fixed while adding the dashboard tests: the request-size middleware replayed `http.disconnect` immediately after a buffered body, which made streaming responses (dashboard assets) send headers only and truncate to empty bodies. It now hands the receive channel back to the server after replay.
+- `npx tsc -p dashboard/jsconfig.json`: clean under `strict` + `checkJs` (no output).
 - `ruff check src tests` and `ruff format --check src tests`: passed.
 - `python3 -m compileall -q src tests`: passed.
 - GitHub Actions CI runs Ruff lint/format, compilation, the full test suite, and benchmark validation.
