@@ -58,8 +58,11 @@ def test_dashboard_shell_has_no_inline_code_for_strict_csp() -> None:
 def test_replay_page_reuses_the_dashboard_bundle() -> None:
     page = (DEMO_ROOT / "replay" / "index.html").read_text(encoding="utf-8")
 
-    assert 'href="../../dashboard/styles.css"' in page
-    assert 'src="../../dashboard/app.js"' in page
+    # Paths must stay inside the site root: Pages serves this repo under /tender/,
+    # so a ../../ hop would escape the deployed prefix.
+    assert 'href="../dashboard/styles.css"' in page
+    assert 'src="../dashboard/app.js"' in page
+    assert "../../" not in page
     assert 'src="replay.js"' in page
     assert 'href="/docs"' not in page  # /docs only exists next to the live API
     assert "onclick" not in page

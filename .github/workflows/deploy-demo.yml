@@ -7,6 +7,7 @@ on:
       - demo/**
       - dashboard/app.js
       - dashboard/styles.css
+      - scripts/build_demo_site.sh
       - .github/workflows/deploy-demo.yml
   workflow_dispatch:
 
@@ -29,15 +30,7 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v4
       - name: Prepare static site
-        run: |
-          mkdir -p _site
-          cp -R demo/. _site/
-          # The replay page reuses the live dashboard bundle (single source of truth).
-          mkdir -p _site/dashboard
-          cp dashboard/app.js dashboard/styles.css _site/dashboard/
-          mkdir -p _site/docs/experiments
-          cp docs/experiments/groq-retry-ablation-3tasks-v1.json _site/docs/experiments/
-          cp docs/PROVIDER_TRIALS.md _site/docs/PROVIDER_TRIALS.md
+        run: bash scripts/build_demo_site.sh _site
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v4
         with:
