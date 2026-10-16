@@ -15,6 +15,14 @@ Tender is a local-first platform for evaluating coding agents. It gives an agent
 - Runtime, token counts, and provider-reported cost when available
 - Task, repository revision, and experiment configuration for reproducibility
 
+## Backend capabilities
+
+- A durable SQLite queue: the API enqueues runs, and a separate lease-based worker claims and executes them with stale-writer fencing and no silent replays.
+- Independent verification: every claimed success is re-run from a clean repository copy with the exact patch applied.
+- Cancellation: queued runs can be cancelled atomically; workers never pick them up.
+- Provider adapters: Groq and any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM, Ollama, ...) behind one typed tool-calling boundary; retries cover rate limits, transient 5xx responses, and network timeouts.
+- Operable API: paginated and filterable run listing with a `summary=true` mode that drops patch, test-output, and issue-body payloads; paginated event timelines (5000 events per page by default, 20000 maximum); latency percentiles and per-model metrics; readiness checks; an optional bearer token for run creation and cancellation; and a request-size cap.
+
 ## Try it locally
 
 Requirements: Python 3.12 or newer. Docker is needed for isolated Docker runs. A model API key is only needed for real hosted-model calls; the offline test suite and benchmark validation work without one.
@@ -29,7 +37,7 @@ python -m tender validate-benchmark \
   --dataset benchmarks/tasks.jsonl
 ```
 
-To use Groq, set `GROQ_API_KEY` in your local environment, then run `python -m tender check-groq`. Never commit `.env` or API keys.
+To use Groq, set `GROQ_API_KEY` in your local environment, then run `python -m tender check-groq`. For any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM, Ollama, ...), set `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` and `OPENAI_MODEL`, then select models with the `openai/` prefix. Never commit `.env` or API keys.
 
 Start the local API and run explorer:
 

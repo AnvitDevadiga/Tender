@@ -31,6 +31,7 @@ class BenchmarkTask:
     @classmethod
     def load_jsonl(cls, path: str | Path) -> list["BenchmarkTask"]:
         tasks: list[BenchmarkTask] = []
+        seen_task_ids: set[str] = set()
         for line_number, line in enumerate(
             Path(path).read_text(encoding="utf-8").splitlines(), start=1
         ):
@@ -55,6 +56,9 @@ class BenchmarkTask:
                 )
                 if not task_id or not workspace:
                     raise ValueError("task_id and workspace are required")
+                if task_id in seen_task_ids:
+                    raise ValueError(f"duplicate task_id in dataset: {task_id}")
+                seen_task_ids.add(task_id)
                 if not re.fullmatch(r"[0-9a-fA-F]{40}", base_commit):
                     raise ValueError("base_commit must be a full 40-character Git commit SHA")
                 if issue.base_commit and issue.base_commit.lower() != base_commit.lower():
@@ -121,7 +125,7 @@ class ExperimentManifest:
             repetitions=int(data["repetitions"]),
             max_tokens=int(data["max_tokens"]),
             max_minutes=int(data["max_minutes"]),
-            retry_budgets=tuple(data["retry_budgets"]),
+            retry_budgets=tuple(int(budget) for budget in data["retry_budgets"]),
             sandbox=str(data.get("sandbox", "local")),
             timeout_seconds=int(data.get("timeout_seconds", 120)),
             input_usd_per_million_tokens=(
@@ -141,12 +145,17 @@ class ExperimentManifest:
         )
         if (
             not manifest.name.strip()
+            or not manifest.dataset.strip()
+            or not manifest.model.strip()
+            or not manifest.architecture.strip()
+            or not manifest.retrieval.strip()
             or manifest.repetitions < 1
             or manifest.max_tokens < 1
             or manifest.max_minutes < 1
         ):
             raise ValueError(
-                "manifest name, repetitions, max_tokens, and max_minutes must be positive"
+                "manifest name, dataset, model, architecture, retrieval, repetitions, "
+                "max_tokens, and max_minutes must be present and positive"
             )
         if not manifest.retry_budgets or any(int(budget) < 0 for budget in manifest.retry_budgets):
             raise ValueError("manifest retry_budgets must contain a non-negative budget")

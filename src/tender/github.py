@@ -7,7 +7,7 @@ import re
 from urllib import request
 from urllib.parse import urlparse
 
-from .models import Issue
+from .models import ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS, Issue
 
 
 class GitHubIssueClient:
@@ -63,10 +63,17 @@ class GitHubIssueClient:
         data = json.loads(payload.decode("utf-8"))
         if "pull_request" in data:
             raise ValueError("GitHub pull requests are not accepted as benchmark issues")
+        title = str(data.get("title") or "").strip()
+        if not title:
+            raise ValueError("GitHub issue response is missing a title")
+        body = str(data.get("body") or "")
+        if len(body) > ISSUE_BODY_MAX_CHARS:
+            marker = "\n...[truncated]"
+            body = body[: ISSUE_BODY_MAX_CHARS - len(marker)] + marker
         return Issue(
             repository=f"{owner}/{repo}",
             number=number,
-            title=data["title"],
-            body=data.get("body") or "",
+            title=title[:ISSUE_TITLE_MAX_CHARS],
+            body=body,
             source_url=url,
         )

@@ -9,6 +9,9 @@ from pydantic import BaseModel, Field
 
 from .state import WorkflowState
 
+ISSUE_TITLE_MAX_CHARS = 1024
+ISSUE_BODY_MAX_CHARS = 200_000
+
 
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
@@ -20,6 +23,7 @@ class RunStatus(StrEnum):
     AWAITING_APPROVAL = "awaiting_approval"
     PASSED = "passed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 class ApprovalDecision(StrEnum):
@@ -48,23 +52,23 @@ class SandboxBackend(StrEnum):
 
 class Issue(BaseModel):
     id: UUID = Field(default_factory=uuid4)
-    repository: str
-    number: int | None = None
-    title: str
-    body: str = ""
-    base_ref: str = "main"
-    base_commit: str | None = None
-    source_url: str | None = None
+    repository: str = Field(min_length=1, max_length=200)
+    number: int | None = Field(default=None, ge=1)
+    title: str = Field(min_length=1, max_length=ISSUE_TITLE_MAX_CHARS)
+    body: str = Field(default="", max_length=ISSUE_BODY_MAX_CHARS)
+    base_ref: str = Field(default="main", max_length=255)
+    base_commit: str | None = Field(default=None, pattern=r"^[0-9a-fA-F]{40}$")
+    source_url: str | None = Field(default=None, max_length=500)
 
 
 class BenchmarkConfig(BaseModel):
-    model: str = "local-deterministic"
-    architecture: str = "single-agent"
-    retrieval: str = "text"
+    model: str = Field(default="local-deterministic", min_length=1, max_length=200)
+    architecture: str = Field(default="single-agent", min_length=1, max_length=100)
+    retrieval: str = Field(default="text", min_length=1, max_length=100)
     retrieval_limit: int = Field(default=12, ge=1, le=50)
     max_retries: int = Field(default=2, ge=0, le=10)
     setup_commands: list[str] = Field(default_factory=list, max_length=20)
-    commands: list[str] = Field(default_factory=lambda: ["pytest -q"])
+    commands: list[str] = Field(default_factory=lambda: ["pytest -q"], max_length=20)
     static_analysis_commands: list[str] = Field(default_factory=list, max_length=20)
     verification_commands: list[str] = Field(default_factory=list, max_length=20)
     require_human_approval: bool = False
@@ -105,13 +109,13 @@ class RunEvent(BaseModel):
 class CreateRunRequest(BaseModel):
     issue: Issue
     config: BenchmarkConfig = Field(default_factory=BenchmarkConfig)
-    workspace: str | None = None
-    benchmark_id: str = "ad-hoc"
+    workspace: str | None = Field(default=None, max_length=500)
+    benchmark_id: str = Field(default="ad-hoc", min_length=1, max_length=200)
     idempotency_key: str | None = Field(default=None, min_length=1, max_length=200)
 
 
 class GitHubIssueRequest(BaseModel):
-    url: str = Field(min_length=1)
+    url: str = Field(min_length=1, max_length=500)
 
 
 class HumanApprovalRequest(BaseModel):

@@ -2,8 +2,11 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
+from collections.abc import Callable
 from pathlib import Path
 from threading import Event, Thread
+from time import monotonic
 from uuid import uuid4
 
 from .artifacts import ArtifactStore
@@ -102,17 +105,56 @@ async def run_one(
         heartbeat.join(timeout=2)
 
 
+def _stop_handler(stopping: asyncio.Event) -> Callable[[], None]:
+    """Signal callback: the first request drains, a second exits immediately.
+
+    A stuck in-flight run can always be abandoned from the terminal; the
+    persisted lease expires and recovery fails the run without replay.
+    """
+    requests = 0
+
+    def request_stop() -> None:
+        nonlocal requests
+        requests += 1
+        if requests == 1:
+            stopping.set()
+            return
+        for handled in (signal.SIGINT, signal.SIGTERM):
+            signal.signal(handled, signal.SIG_DFL)
+        os.kill(os.getpid(), signal.SIGINT)
+
+    return request_stop
+
+
 async def serve() -> None:
+    """Poll the queue until SIGINT/SIGTERM, finishing the in-flight run first."""
     db_path = os.getenv("TENDER_DB_PATH", "tender.db")
     root_value = os.getenv("TENDER_WORKSPACE_ROOT")
     if not root_value:
         raise RuntimeError("TENDER_WORKSPACE_ROOT is required for worker execution")
     poll_seconds = max(0.1, min(float(os.getenv("TENDER_WORKER_POLL_SECONDS", "1")), 30.0))
     lease_seconds = max(10, min(int(os.getenv("TENDER_WORKER_LEASE_SECONDS", "90")), 3600))
+    recovery_seconds = max(
+        1.0, min(float(os.getenv("TENDER_WORKER_RECOVERY_SECONDS", "15")), 3600.0)
+    )
     store = RunStore(db_path)
     worker_id = str(uuid4())
-    while True:
-        store.recover_interrupted_runs()
+    stopping = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    request_stop = _stop_handler(stopping)
+    for handled in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(handled, request_stop)
+        except (NotImplementedError, RuntimeError):
+            # Signal handlers are unavailable on some platforms; keep polling.
+            pass
+    next_recovery = 0.0
+    while not stopping.is_set():
+        # Recovery takes a write lock; space it out so idle workers do not
+        # serialize on SQLite while polling for new work.
+        if monotonic() >= next_recovery:
+            store.recover_interrupted_runs()
+            next_recovery = monotonic() + recovery_seconds
         processed = await run_one(
             store,
             root_value,
@@ -121,4 +163,7 @@ async def serve() -> None:
             lease_seconds,
         )
         if processed is None:
-            await asyncio.sleep(poll_seconds)
+            try:
+                await asyncio.wait_for(stopping.wait(), timeout=poll_seconds)
+            except TimeoutError:
+                pass

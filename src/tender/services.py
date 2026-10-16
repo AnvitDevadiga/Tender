@@ -12,6 +12,23 @@ from .state import WorkflowState
 from .store import LeaseLost, RunStore
 from .workflow import AgentWorkflow
 
+MAX_STORED_TEST_OUTPUT_BYTES = 256 * 1024
+_OUTPUT_TRUNCATION_MARKER = (
+    "\n...[run payload truncated; full gate output remains in run artifacts]"
+)
+
+
+def _bounded_output(text: str, limit: int = MAX_STORED_TEST_OUTPUT_BYTES) -> str:
+    """Cap the copy of gate output stored in the run payload.
+
+    Per-gate command output stays complete in the run artifact directory, so
+    the database row only needs enough to explain the outcome.
+    """
+    encoded = text.encode("utf-8")
+    if len(encoded) <= limit:
+        return text
+    return encoded[:limit].decode("utf-8", errors="ignore") + _OUTPUT_TRUNCATION_MARKER
+
 
 class RunService:
     def __init__(
@@ -155,11 +172,13 @@ class RunService:
         run.latency_ms = round((perf_counter() - started) * 1000)
         run.tool_calls = result.tool_calls
         run.patch = result.attempts[-1].patch.diff if result.attempts else None
-        run.test_output = "\n".join(
-            item.stdout + item.stderr
-            for attempt in result.attempts
-            for gate in attempt.quality_gates
-            for item in gate.grade.results
+        run.test_output = _bounded_output(
+            "\n".join(
+                item.stdout + item.stderr
+                for attempt in result.attempts
+                for gate in attempt.quality_gates
+                for item in gate.grade.results
+            )
         )
         artifact_path = self.artifacts.path_for(run)
         run.metadata["artifact_path"] = str(artifact_path)

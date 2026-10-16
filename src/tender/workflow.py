@@ -143,8 +143,6 @@ class PatchApplier:
     """Apply only valid unified diffs; model prose and fenced wrappers are stripped."""
 
     def apply(self, root: str | Path, response: str) -> None:
-        import subprocess
-
         diff = self.extract(response)
         if not diff:
             raise ValueError("provider response did not contain a unified diff")
@@ -171,15 +169,20 @@ class PatchApplier:
 
 
 class AgentWorkflow:
+    #: Provider HTTP statuses that are safe to retry without changing the request.
+    RETRYABLE_PROVIDER_STATUSES = ("(429)", "(500)", "(502)", "(503)", "(504)", "(529)")
+
     def __init__(
         self,
         provider: ModelProvider,
         grader: TestGrader | None = None,
         retriever: TextRetriever | None = None,
+        provider_attempts: int = 3,
     ) -> None:
         self.provider = provider
         self.grader = grader or TestGrader()
         self.retriever = retriever or TextRetriever()
+        self.provider_attempts = max(1, provider_attempts)
         self.applier = PatchApplier()
 
     async def run(
@@ -791,24 +794,34 @@ class AgentWorkflow:
     async def _generate_with_provider_retry(
         self, messages: list[dict[str, object]], tools: list[dict[str, object]] | None = None
     ) -> ModelResponse:
-        for retry in range(3):
+        for retry in range(self.provider_attempts):
             try:
                 return await self.provider.generate(messages, tools=tools)
             except RuntimeError as exc:
-                if "(429)" not in str(exc) or retry == 2:
+                delay = self._retry_delay(str(exc), retry)
+                if delay is None or retry == self.provider_attempts - 1:
                     raise
-                retry_after = re.search(
-                    r"Please try again in\s+(\d+(?:\.\d+)?)(ms|s)", str(exc), re.IGNORECASE
-                )
-                if retry_after:
-                    delay = float(retry_after.group(1))
-                    if retry_after.group(2).lower() == "ms":
-                        delay /= 1000
-                    delay += 0.25
-                else:
-                    delay = 2 ** (retry + 1)
-                await asyncio.sleep(min(delay, 60))
+                await asyncio.sleep(delay)
+            except OSError:
+                if retry == self.provider_attempts - 1:
+                    raise
+                await asyncio.sleep(min(2 ** (retry + 1), 60))
         raise RuntimeError("provider retry budget exhausted")
+
+    @classmethod
+    def _retry_delay(cls, message: str, retry: int) -> float | None:
+        """Delay for a transient provider error; None when it must propagate."""
+        if not any(status in message for status in cls.RETRYABLE_PROVIDER_STATUSES):
+            return None
+        retry_after = re.search(
+            r"Please try again in\s+(\d+(?:\.\d+)?)(ms|s)", message, re.IGNORECASE
+        )
+        if retry_after:
+            delay = float(retry_after.group(1))
+            if retry_after.group(2).lower() == "ms":
+                delay /= 1000
+            return min(delay + 0.25, 60)
+        return min(2 ** (retry + 1), 60)
 
     @staticmethod
     def _grade_payload(grade: Grade) -> dict[str, object]:
@@ -836,6 +849,8 @@ class AgentWorkflow:
             return f"planning_error: {message}"
         if isinstance(error, SandboxUnavailable):
             return f"tooling_error: {message}"
+        if "API rejected the request" in message or "is not configured" in message:
+            return f"provider_error: {message}"
         if "unified diff" in message or "patch" in message.lower() or "diff" in message.lower():
             return f"patch_error: {message}"
         if isinstance(error, (OSError, subprocess.SubprocessError)):

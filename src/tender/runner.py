@@ -76,6 +76,8 @@ async def run_experiment(
     dataset_root = Path.cwd()
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    store = RunStore(output_path.parent / ".tender-runs.db")
+    artifacts = ArtifactStore(output_path.parent / "artifacts")
     results = []
     deadline = monotonic() + manifest.max_minutes * 60
     budget_exhausted = False
@@ -161,11 +163,10 @@ async def run_experiment(
                             ),
                             max_output_tokens=manifest.max_tokens,
                         )
-                        store = RunStore(output_path.parent / ".tender-runs.db")
                         service = RunService(
                             provider=provider_for(config),
                             store=store,
-                            artifacts=ArtifactStore(output_path.parent / "artifacts"),
+                            artifacts=artifacts,
                         )
                         run = EvaluationRun(
                             issue=task.issue, config=config, benchmark_id=manifest.name
@@ -245,6 +246,7 @@ async def run_experiment(
                                 "retrieval_limit": retrieval_limit,
                                 "repetition": repetition,
                                 "run_id": str(run.id),
+                                "complete": not budget_exhausted,
                                 "passed": passed,
                                 "target_tests_passed": target_tests_passed,
                                 "regression_free": (passed if target_tests_passed else None),

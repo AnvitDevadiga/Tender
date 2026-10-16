@@ -347,8 +347,12 @@ class AgentToolbox:
     def _dependency_lookup(self, query: str, limit: int) -> list[dict[str, object]]:
         term = query.casefold()
         matches: list[dict[str, object]] = []
+        scanned = 0
         for current, dirs, names in os.walk(self.root, followlinks=False):
             parent = Path(current)
+            scanned += len(names)
+            if scanned > 10_000:
+                break
             dirs[:] = [
                 name
                 for name in dirs

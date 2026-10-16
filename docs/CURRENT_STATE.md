@@ -1,6 +1,6 @@
 # Current State
 
-Audit date: 2026-10-10
+Audit date: 2026-10-16 (hardening pass: cancellation, pagination, provider breadth, request bounds, retry classification, graceful worker stop).
 
 ## Where the project is
 
@@ -29,8 +29,14 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 - Local and Docker command runners cap captured output; local command timeouts terminate the command process group.
 - GitHub issue URL validation and bounded API response handling.
 - Versioned benchmark tasks with stable IDs, full commit pins, setup/test/verification commands, and time limits.
-- Optional request idempotency keys and atomic SQLite run claiming.
+- Optional request idempotency keys and atomic SQLite run claiming. Replaying a key returns the stored run as-is — including one that has since been cancelled — without re-executing or resurrecting it.
 - API run creation atomically persists a queued run and audit event, then returns immediately. A separate worker claims the oldest job, rechecks its relative workspace beneath the configured root, and executes it.
+- Queued runs can be cancelled atomically through `POST /runs/{id}/cancel`; the transition, audit events, and metadata are committed together, and worker claims skip cancelled runs. Cancelled runs are reported separately from completed runs in metrics.
+- Run listing supports status filtering, limits, and offsets, plus a `summary=true` mode that drops patch, test-output, and issue-body payloads. Event timelines accept limit/offset pagination and return up to 5000 events per page by default (20000 maximum). Metrics include latency percentiles and per-model/per-benchmark summaries.
+- Request bodies are capped (`TENDER_MAX_REQUEST_BYTES`, default 1 MiB) before routing, issue/config payload fields are length-bounded, and GitHub issue imports are constrained by the validated `Issue` model. Persisted payloads that predate a bound (including legacy number encodings, empty required strings, and invalid sandbox values) are clamped to the current limits when read, so legacy rows stay readable and are healed in place the next time a worker claims and saves them.
+- Mutating API routes (`POST /runs`, `POST /runs/{id}/cancel`) accept an optional server-configured bearer token (`TENDER_API_TOKEN`); when it is unset the local-development API stays open and must remain bound to loopback.
+- Groq and any OpenAI-compatible chat-completions endpoint (OpenAI, OpenRouter, vLLM, Ollama, ...) are supported through one provider seam. Reasoning-style models (o-series, the GPT-5 family, or any endpoint that rejects an explicit temperature) omit the temperature override. Provider retries cover HTTP 429 (honoring the advertised delay), transient 5xx responses, and network timeouts; permanent 4xx errors fail fast.
+- The worker responds to SIGINT/SIGTERM by finishing the in-flight run before exiting (a second stop signal exits immediately so a stuck run can be abandoned), spaces out lease-recovery scans to avoid idle write-lock churn, and the workflow's stored test output is bounded while full gate output remains in run artifacts.
 - Local Compose separates API, worker, and sandbox images. Only the worker receives the Docker socket; SQLite state, artifacts, fixtures, and a host-visible temporary directory are shared. Workers maintain expiring database leases, heartbeat while running, and fail expired runs without replay; stale owners are fenced from writing run state.
 - Benchmark verification applies the final agent patch to a second clean task copy; separate fixture assertions support regression-free-rate measurement. Versioned experiment output includes manifest/dataset provenance, trial design, per-retry-budget latency/attempt summaries, patch size, and warnings for fewer than 30 unique tasks. Comparisons require complete experiments with matching dataset hash, task cohort, retry budgets, and repetition count, and report per-task outcomes.
 - Local run explorer dashboard, CI workflow, setup/deployment notes, and a separate static portfolio page with a GitHub Pages workflow.
@@ -39,15 +45,16 @@ Think of it as a workshop: a task and a repository go in, a model may suggest a 
 
 - LangGraph orchestration, MCP interoperability, dependency-graph expansion, symbol-aware retrieval outside Python, and plan approval.
 - Plan approval, GitHub PR creation, and role-based approval identity/permissions.
-- PostgreSQL/migrations, workflow checkpoint resume, cancellation, and public-run authentication/quotas.
+- PostgreSQL/migrations, workflow checkpoint resume, and public-run identity, authorization, quotas, and rate limits. The optional `TENDER_API_TOKEN` gate is a server-side shared secret, not multi-user auth.
 - Broad, independently sampled benchmark evidence. One small repeated Groq fixture experiment completed; see [provider trial record](PROVIDER_TRIALS.md).
 - The project is connected to the supplied public GitHub repository. Source is pushed to `main`; the interactive recorded-run demo is live at [anvitdevadiga.github.io/Tender](https://anvitdevadiga.github.io/tender/).
 
 ## Verification
 
-- `pytest -q`: 100 passed, with one Starlette/httpx deprecation warning.
+- `pytest -q`: 142 passed, with one Starlette/httpx deprecation warning. The hardening pass added 37 regression tests covering cancellation, pagination, request caps, API-token gating, provider selection, retry classification, legacy-payload clamping, reasoning-model temperature handling, and worker stop signals.
+- `ruff check src tests` and `ruff format --check src tests`: passed.
 - `python3 -m compileall -q src tests`: passed.
-- GitHub Actions CI passed for the latest code changes, including Ruff lint/format, compilation, all 102 tests, and benchmark validation.
+- GitHub Actions CI runs Ruff lint/format, compilation, the full test suite, and benchmark validation.
 - Benchmark manifest validation: three pinned task definitions accepted.
 - `python scripts/prepare_fixtures.py` creates the same pinned baseline from a clean clone; the pin test and manifest validation pass locally.
 - Latest worker and sandbox images rebuilt successfully; the local API health endpoint returned HTTP 200, and the corrected Groq-backed task passed end to end.

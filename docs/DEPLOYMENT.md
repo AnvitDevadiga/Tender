@@ -13,6 +13,14 @@ Compose mounts local state under `.tender-data/`, which is gitignored. The examp
 
 Copy `.env.example` to `.env`; Compose interpolates the listed provider, approval, and GitHub values into only the required service. Never commit `.env`. Never mount the Docker socket into a public API container or a public worker.
 
+## API operations
+
+- `GET /health` is a liveness check; `GET /ready` verifies the SQLite store answers queries and is suitable for container readiness probes.
+- `GET /runs` supports `status`, `limit`, `offset`, and `summary=true` (drops patch, test-output, and issue-body payloads); `GET /runs/{id}/events` supports `limit` and `offset` and returns up to 5000 events per page by default (20000 maximum), so page long histories with `offset`; `GET /metrics` reports queue depth, pass rate, latency percentiles (p50/p95), token/tool totals, and per-model/per-benchmark summaries.
+- `POST /runs` enqueues work. `POST /runs/{id}/cancel` cancels a queued (unclaimed) run atomically; running runs cannot be cancelled and return HTTP 409.
+- Set `TENDER_API_TOKEN` to require `Authorization: Bearer <token>` on `POST /runs` and `POST /runs/{id}/cancel`; leave it unset only while the API stays bound to loopback. Set `TENDER_MAX_REQUEST_BYTES` to tune the request-body cap.
+- Workers finish the current run and exit on SIGINT/SIGTERM; a second stop signal exits immediately if a run is stuck. `TENDER_WORKER_RECOVERY_SECONDS` controls how often idle workers scan for expired leases (default 15s).
+
 ## Production target
 
 ```mermaid

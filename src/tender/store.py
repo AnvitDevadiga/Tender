@@ -1,13 +1,34 @@
 from __future__ import annotations
 
 import json
+import logging
+import math
+import re
 import sqlite3
 from datetime import timedelta
 from pathlib import Path
+from typing import Any
 from uuid import uuid4
 
-from .models import ApprovalDecision, EvaluationRun, FailureCategory, RunEvent, RunStatus, utcnow
+from pydantic import ValidationError
+
+from .models import (
+    ISSUE_BODY_MAX_CHARS,
+    ISSUE_TITLE_MAX_CHARS,
+    ApprovalDecision,
+    EvaluationRun,
+    FailureCategory,
+    RunEvent,
+    RunStatus,
+    utcnow,
+)
 from .state import WorkflowState
+
+LOGGER = logging.getLogger(__name__)
+
+_BASE_COMMIT_PATTERN = re.compile(r"^[0-9a-fA-F]{40}$")
+_COMMAND_LIST_LIMIT = 20
+_INT64_MAX = 2**63 - 1
 
 
 class IdempotencyConflict(ValueError):
@@ -20,6 +41,137 @@ class ApprovalConflict(ValueError):
 
 class LeaseLost(RuntimeError):
     """A worker no longer owns a live run lease and must stop committing changes."""
+
+
+class CancelConflict(ValueError):
+    """A run already finished or is claimed by a worker and cannot be cancelled."""
+
+
+def _coerce_int(value: Any) -> int | None:
+    """Best-effort int for legacy encodings: bools, floats, and numeric strings."""
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value) if math.isfinite(value) else None
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            pass
+        try:
+            parsed = float(value)
+        except ValueError:
+            return None
+        return int(parsed) if math.isfinite(parsed) else None
+    return None
+
+
+def _sanitize_run_payload(data: dict[str, Any]) -> bool:
+    """Clamp a persisted payload to current model bounds; True when changed.
+
+    Rows written before a bound existed (or edited outside the service) must
+    not make reads or worker claims fail validation. Known bounded fields are
+    clamped, including legacy encodings of numbers and empty required strings;
+    structurally corrupt payloads are left for validation to reject.
+    """
+    changed = False
+    issue = data.get("issue")
+    if isinstance(issue, dict):
+        for field, limit, fallback in (
+            ("repository", 200, "(unknown repository)"),
+            ("title", ISSUE_TITLE_MAX_CHARS, "(untitled)"),
+            ("body", ISSUE_BODY_MAX_CHARS, None),
+            ("base_ref", 255, None),
+            ("source_url", 500, None),
+        ):
+            value = issue.get(field)
+            if not isinstance(value, str):
+                continue
+            if len(value) > limit:
+                issue[field] = value[:limit]
+                changed = True
+            elif fallback is not None and not value:
+                issue[field] = fallback
+                changed = True
+        commit = issue.get("base_commit")
+        if commit is not None and (
+            not isinstance(commit, str) or _BASE_COMMIT_PATTERN.fullmatch(commit) is None
+        ):
+            issue["base_commit"] = None
+            changed = True
+        number = issue.get("number")
+        if number is not None:
+            coerced = _coerce_int(number)
+            repaired = coerced if coerced is not None and 1 <= coerced <= _INT64_MAX else None
+            if type(number) is not int or number != repaired:
+                issue["number"] = repaired
+                changed = True
+    config = data.get("config")
+    if isinstance(config, dict):
+        for field, limit, fallback in (
+            ("model", 200, "local-deterministic"),
+            ("architecture", 100, "single-agent"),
+            ("retrieval", 100, "text"),
+        ):
+            value = config.get(field)
+            if not isinstance(value, str):
+                continue
+            if len(value) > limit:
+                config[field] = value[:limit]
+                changed = True
+            elif not value:
+                config[field] = fallback
+                changed = True
+        for field, low, high in (
+            ("retrieval_limit", 1, 50),
+            ("max_retries", 0, 10),
+            ("timeout_seconds", 1, 3600),
+            ("max_output_tokens", 1, 32768),
+        ):
+            value = config.get(field)
+            if value is None:
+                continue
+            coerced = _coerce_int(value)
+            if coerced is None:
+                continue  # not an int-like encoding; leave for validation
+            clamped = min(max(coerced, low), high)
+            if clamped != value:
+                config[field] = clamped
+                changed = True
+        for field in (
+            "setup_commands",
+            "commands",
+            "static_analysis_commands",
+            "verification_commands",
+        ):
+            value = config.get(field)
+            if isinstance(value, list) and len(value) > _COMMAND_LIST_LIMIT:
+                config[field] = value[:_COMMAND_LIST_LIMIT]
+                changed = True
+        sandbox = config.get("sandbox")
+        if not isinstance(sandbox, str) or sandbox not in {"local", "docker"}:
+            config["sandbox"] = "local"
+            changed = True
+    return changed
+
+
+def _decode_run(payload: str) -> EvaluationRun:
+    """Decode a persisted run, clamping legacy payloads to current model bounds.
+
+    Current records take a strict fast path. Bounded values that predate a
+    limit are clamped and re-validated; mutations persist the clamped form the
+    next time the run is saved.
+    """
+    try:
+        return EvaluationRun.model_validate_json(payload)
+    except ValidationError:
+        data = json.loads(payload)
+        if not isinstance(data, dict) or not _sanitize_run_payload(data):
+            raise
+        LOGGER.warning("clamped persisted run %s to current model bounds", data.get("id"))
+        return EvaluationRun.model_validate(data)
 
 
 class RunStore:
@@ -88,6 +240,17 @@ class RunStore:
             db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_runs_status_lease ON runs(status, lease_expires_at)"
             )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_runs_status_created ON runs(status, created_at, id)"
+            )
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_runs_created ON runs(created_at DESC, id DESC)"
+            )
+
+    def ping(self) -> None:
+        """Raise when the SQLite store cannot serve a trivial query."""
+        with self._connect() as db:
+            db.execute("SELECT 1")
 
     def save_run(self, run: EvaluationRun, lease_owner: str | None = None) -> None:
         with self._connect() as db:
@@ -117,12 +280,12 @@ class RunStore:
                         raise IdempotencyConflict(
                             "idempotency key was already used with a different request"
                         )
-                    return EvaluationRun.model_validate_json(existing["payload"]), False
+                    return _decode_run(existing["payload"]), False
             existing_run = db.execute(
                 "SELECT payload FROM runs WHERE id = ?", (str(run.id),)
             ).fetchone()
             if existing_run:
-                return EvaluationRun.model_validate_json(existing_run["payload"]), False
+                return _decode_run(existing_run["payload"]), False
             self._save_run(db, run)
             if created_event is not None:
                 if created_event.run_id != run.id:
@@ -154,7 +317,7 @@ class RunStore:
             ).fetchone()
             if not row:
                 return None
-            run = EvaluationRun.model_validate_json(row["payload"])
+            run = _decode_run(row["payload"])
             run.status = RunStatus.RUNNING
             db.execute(
                 "UPDATE runs SET status = ?, payload = ? WHERE id = ? AND status = 'queued'",
@@ -180,7 +343,7 @@ class RunStore:
             ).fetchone()
             if row is None:
                 return None
-            run = EvaluationRun.model_validate_json(row["payload"])
+            run = _decode_run(row["payload"])
             run.status = RunStatus.RUNNING
             changed = db.execute(
                 "UPDATE runs SET status = ?, payload = ?, lease_owner = ?, "
@@ -255,7 +418,7 @@ class RunStore:
             row = db.execute("SELECT payload FROM runs WHERE id = ?", (run_id,)).fetchone()
             if row is None:
                 raise KeyError(run_id)
-            run = EvaluationRun.model_validate_json(row["payload"])
+            run = _decode_run(row["payload"])
             if not run.config.require_human_approval:
                 raise ApprovalConflict("human approval was not required for this run")
             if run.status is not RunStatus.AWAITING_APPROVAL:
@@ -328,6 +491,53 @@ class RunStore:
             )
             return run
 
+    def cancel_run(self, run_id: str) -> EvaluationRun:
+        """Atomically cancel a queued run that no worker has claimed."""
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            row = db.execute("SELECT payload FROM runs WHERE id = ?", (run_id,)).fetchone()
+            if row is None:
+                raise KeyError(run_id)
+            run = _decode_run(row["payload"])
+            if run.status is RunStatus.CANCELLED:
+                raise CancelConflict("run is already cancelled")
+            if run.status is not RunStatus.QUEUED:
+                raise CancelConflict("only queued runs can be cancelled")
+            run.status = RunStatus.CANCELLED
+            run.metadata["cancelled"] = True
+            self._save_run(db, run)
+            timestamp = utcnow()
+            events = (
+                RunEvent(
+                    run_id=run.id,
+                    name="run.cancelled",
+                    timestamp=timestamp,
+                    payload={"reason": "operator_cancelled"},
+                ),
+                RunEvent(
+                    run_id=run.id,
+                    name="run.finished",
+                    timestamp=timestamp,
+                    payload={
+                        "status": run.status.value,
+                        "failure_category": run.failure_category.value,
+                    },
+                ),
+            )
+            db.executemany(
+                "INSERT INTO run_events (run_id, name, timestamp, payload) VALUES (?, ?, ?, ?)",
+                [
+                    (
+                        str(event.run_id),
+                        event.name,
+                        event.timestamp.isoformat(),
+                        json.dumps(event.payload),
+                    )
+                    for event in events
+                ],
+            )
+            return run
+
     def recover_interrupted_runs(self) -> list[EvaluationRun]:
         """Fail runs without a live worker lease; never replay interrupted side effects."""
         recovered: list[EvaluationRun] = []
@@ -341,7 +551,7 @@ class RunStore:
                 (now,),
             ).fetchall()
             for row in rows:
-                run = EvaluationRun.model_validate_json(row["payload"])
+                run = _decode_run(row["payload"])
                 interrupted_state = run.current_state.value if run.current_state else None
                 run.status = RunStatus.FAILED
                 run.failure_category = FailureCategory.ENVIRONMENT
@@ -420,14 +630,25 @@ class RunStore:
     def get_run(self, run_id: str) -> EvaluationRun | None:
         with self._connect() as db:
             row = db.execute("SELECT payload FROM runs WHERE id = ?", (run_id,)).fetchone()
-        return EvaluationRun.model_validate_json(row["payload"]) if row else None
+        return _decode_run(row["payload"]) if row else None
 
-    def list_runs(self, limit: int = 100) -> list[EvaluationRun]:
+    def list_runs(
+        self,
+        limit: int = 100,
+        *,
+        offset: int = 0,
+        status: RunStatus | None = None,
+    ) -> list[EvaluationRun]:
+        query = "SELECT payload FROM runs"
+        parameters: list[object] = []
+        if status is not None:
+            query += " WHERE status = ?"
+            parameters.append(status.value)
+        query += " ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?"
+        parameters.extend((limit, offset))
         with self._connect() as db:
-            rows = db.execute(
-                "SELECT payload FROM runs ORDER BY created_at DESC LIMIT ?", (limit,)
-            ).fetchall()
-        return [EvaluationRun.model_validate_json(row["payload"]) for row in rows]
+            rows = db.execute(query, parameters).fetchall()
+        return [_decode_run(row["payload"]) for row in rows]
 
     def append_event(self, event: RunEvent) -> None:
         with self._connect() as db:
@@ -462,13 +683,25 @@ class RunStore:
                 ),
             )
 
-    def get_events(self, run_id: str) -> list[RunEvent]:
+    def get_events(
+        self,
+        run_id: str,
+        *,
+        limit: int | None = None,
+        offset: int = 0,
+    ) -> list[RunEvent]:
+        query = (
+            "SELECT run_id, name, timestamp, payload FROM run_events WHERE run_id = ? ORDER BY id"
+        )
+        parameters: list[object] = [run_id]
+        if limit is not None:
+            query += " LIMIT ? OFFSET ?"
+            parameters.extend((limit, offset))
+        elif offset:
+            query += " LIMIT -1 OFFSET ?"
+            parameters.append(offset)
         with self._connect() as db:
-            rows = db.execute(
-                "SELECT run_id, name, timestamp, payload FROM run_events "
-                "WHERE run_id = ? ORDER BY id",
-                (run_id,),
-            ).fetchall()
+            rows = db.execute(query, parameters).fetchall()
         return [
             RunEvent(
                 run_id=row["run_id"],
