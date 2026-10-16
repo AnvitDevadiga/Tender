@@ -49,14 +49,14 @@ Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). The das
 
 ## Live demo and current evidence
 
-The [public demo](https://anvitdevadiga.github.io/tender/) replays a recorded run. It does not accept tasks or execute submitted code. The paired retrieval-cap experiment planned 60 trials across 30 tasks and five pinned repositories, but provider quota and tool-call errors left only five clean task pairs. Those pairs showed no solve-rate gain from the smaller context cap, so they do not support an efficiency claim. Read the [experiment report](docs/experiments/retrieval-cap-ab-v1.md), [raw results](docs/experiments/retrieval-cap-ab-v1.json), and earlier [provider trial notes](docs/PROVIDER_TRIALS.md). Token-cost figures are published-rate estimates, not billing records.
+The [public demo](https://anvitdevadiga.github.io/tender/) replays a recorded run and a [console replay](https://anvitdevadiga.github.io/tender/replay/) over the published experiment records. Neither accepts tasks or executes submitted code. The paired retrieval-cap experiment planned 60 trials across 30 tasks and five pinned repositories, but provider quota and tool-call errors left only five clean task pairs. Those pairs showed no solve-rate gain from the smaller context cap, so they do not support an efficiency claim. Read the [experiment report](docs/experiments/retrieval-cap-ab-v1.md), [raw results](docs/experiments/retrieval-cap-ab-v1.json), and earlier [provider trial notes](docs/PROVIDER_TRIALS.md). Token-cost figures are published-rate estimates, not billing records.
 
 ## Project map
 
 - `src/tender/` — API, workflow, providers, sandbox, persistence, and benchmark runner
 - `benchmarks/` and `experiments/` — pinned tasks and experiment configurations
 - `dashboard/` — local run explorer (zero-build ES modules: `index.html`, `styles.css`, `app.js`)
-- `demo/` — read-only public portfolio demo
+- `demo/` — read-only public portfolio demo (portfolio page plus the recorded console replay in `demo/replay/`)
 - `docs/` — architecture, evaluation contract, security, and operating notes
 - `assets/` — monochrome brand and diagram assets (SVG and transparent PNG)
 

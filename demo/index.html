@@ -17,6 +17,7 @@
       <a href="#method">Method</a>
       <a href="#results">Results</a>
       <a href="#run">Run record</a>
+      <a href="#console">Console</a>
       <a class="nav-source" href="https://github.com/AnvitDevadiga/tender" target="_blank" rel="noreferrer">Source <span aria-hidden="true">↗</span></a>
     </nav>
   </header>
@@ -83,9 +84,35 @@
       <p class="trace-note" id="trace-caveat"></p>
     </section>
 
+    <section class="console-section section-wrap" id="console" aria-labelledby="console-title">
+      <div class="section-kicker"><span>04 / Local console</span><span>Recorded replay</span></div>
+      <div class="console-heading">
+        <h2 id="console-title">Every stored run,<br>still inspectable.</h2>
+        <p>The console is a local command center over the same records: filters and keyboard navigation, event timelines, unified patch diffs, artifact inventories, side-by-side comparison, and JSON/CSV export. The screenshots below come from the recorded replay — 19 runs from the published experiment above plus one follow-up verification.</p>
+      </div>
+      <div class="console-grid">
+        <figure class="console-shot console-shot-wide">
+          <img src="assets/dashboard-overview.jpg" alt="Tender console in light mode: status filters, search, and recorded latency, tokens, and cost for each run." width="1200" height="750" loading="lazy" />
+          <figcaption>Run list, filters, and recorded measurements.</figcaption>
+        </figure>
+        <figure class="console-shot">
+          <img src="assets/dashboard-drawer.jpg" alt="Run inspector in dark mode showing a unified diff of the recorded patch." width="1200" height="750" loading="lazy" />
+          <figcaption>The inspector: patch diffs, timelines, artifacts.</figcaption>
+        </figure>
+        <figure class="console-shot console-shot-tall">
+          <img src="assets/dashboard-mobile.jpg" alt="The console on a phone viewport: status chips, filters, and run cards." width="780" height="1688" loading="lazy" />
+          <figcaption>Responsive down to a phone viewport.</figcaption>
+        </figure>
+      </div>
+      <div class="console-actions">
+        <a class="text-link" href="replay/">Open the recorded replay <span aria-hidden="true">↗</span></a>
+        <p class="console-note">The replay serves the real console bundle from a static snapshot of the API responses. Mutating actions answer with an explicit refusal; nothing is re-run on the page. Regenerate it with <code>python scripts/record_replay.py</code>.</p>
+      </div>
+    </section>
+
     <section class="next-step" aria-labelledby="next-title">
       <div class="section-wrap next-inner">
-        <span class="section-kicker">04 / Next</span>
+        <span class="section-kicker">05 / Next</span>
         <h2 id="next-title">More tasks.<br>Stronger conclusions.</h2>
         <div><p>The next step is a larger, more varied task set. Broader claims can wait until the evidence supports them.</p><a class="text-link light-link" href="https://github.com/AnvitDevadiga/tender" target="_blank" rel="noreferrer">Explore the source <span aria-hidden="true">↗</span></a></div>
       </div>

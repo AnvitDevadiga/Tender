@@ -1612,6 +1612,19 @@ kbd {
     padding: 10px 14px;
     gap: 10px;
   }
+  .wordmark small {
+    display: none; /* the tagline steals the rows that actions need on phones */
+  }
+  .top-actions {
+    gap: 6px;
+  }
+  .top-actions .btn {
+    padding: 7px 10px;
+    white-space: nowrap;
+  }
+  .top-actions .btn[data-action="refresh"] {
+    display: none; /* polling refreshes automatically; the palette still exposes it */
+  }
   .pill span.label {
     display: none;
   }

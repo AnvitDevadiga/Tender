@@ -112,6 +112,10 @@ const MAX_LIMIT = 1000;
 const PAGE_SIZE = 100;
 const PATCH_RENDER_LIMIT = 4000;
 
+/* The static replay page (demo/replay/) sets this before the module loads; the
+   live dashboard never does. Replay mode only changes what the chrome claims. */
+const REPLAY_MODE = Boolean(/** @type {any} */ (window).TENDER_REPLAY);
+
 const STORE_KEYS = {
   theme: "tender.theme",
   filters: "tender.filters",
@@ -459,9 +463,9 @@ function render() {
 
 function renderStatusPill() {
   const pill = $("#status-pill");
-  pill.classList.toggle("live", state.apiOk);
+  pill.classList.toggle("live", state.apiOk && !REPLAY_MODE);
   pill.classList.toggle("offline", !state.apiOk);
-  const label = state.apiOk ? "API ready" : "API offline";
+  const label = REPLAY_MODE ? "Recorded replay" : state.apiOk ? "API ready" : "API offline";
   const labelNode = pill.querySelector("span.label");
   if (labelNode) labelNode.textContent = label;
   pill.setAttribute("aria-label", label);
@@ -578,7 +582,7 @@ function renderSelects() {
 function renderOnboarding() {
   const card = $("#onboarding");
   const dismissed = localStorage.getItem(STORE_KEYS.onboarding) === "1";
-  if (dismissed) {
+  if (REPLAY_MODE || dismissed) {
     card.classList.remove("open");
     return;
   }
@@ -1021,7 +1025,8 @@ function paletteItems() {
   }
   for (const run of state.runs) {
     const label = `${run.issue?.title || "Untitled"} — ${run.status}`;
-    if (query && !`${label} ${run.id} ${run.config?.model || ""}`.toLowerCase().includes(query)) continue;
+    const haystack = `${label} ${run.id} ${run.config?.model || ""} ${run.issue?.repository || ""} ${run.benchmark_id}`;
+    if (query && !haystack.toLowerCase().includes(query)) continue;
     if (items.filter((item) => item.group === "Runs").length >= 6) break;
     items.push({
       group: "Runs",
@@ -1405,6 +1410,7 @@ function loadStoredPrefs() {
    ========================================================================== */
 
 function startPolling() {
+  if (REPLAY_MODE) return; // recorded data never changes; polling would only burn requests
   setInterval(() => {
     if (document.hidden || !state.apiOk) return;
     const active = state.runs.some((run) => ["queued", "running", "awaiting_approval"].includes(run.status));
