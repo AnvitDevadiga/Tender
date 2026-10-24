@@ -83,7 +83,7 @@ def test_replay_snapshot_stays_clean_and_complete() -> None:
     assert leaked is None, f"snapshot leaks a secret-like string: {leaked}"
 
     snapshot = json.loads(raw)
-    assert snapshot["schema"] == "tender.dashboard.replay.v1"
+    assert snapshot["schema"] == "tender.dashboard.replay.v2"
     runs = snapshot["runs"]
     run_ids = {run["id"] for run in runs}
     assert runs

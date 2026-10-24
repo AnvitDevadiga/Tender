@@ -131,6 +131,8 @@ def _run_bounded(
         while True:
             try:
                 return_code = process.wait(timeout=_POLL_SECONDS)
+                # A cancel() that killed the group directly still counts as cancelled.
+                timed_out = budget is not None and budget.cancelled.is_set()
                 break
             except subprocess.TimeoutExpired:
                 if time.monotonic() >= deadline or (budget is not None and budget.exhausted()):

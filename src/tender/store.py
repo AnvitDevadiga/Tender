@@ -5,6 +5,8 @@ import logging
 import math
 import re
 import sqlite3
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import timedelta
 from pathlib import Path
 from typing import Any
@@ -180,21 +182,29 @@ class RunStore:
     def __init__(self, path: str | Path = "tender.db") -> None:
         self.path = str(path)
         self._memory = self.path == ":memory:"
+        # A unique name per store: id(self) can be reused after garbage collection,
+        # which would let a new in-memory store attach to a stale shared database.
         self._dsn = (
-            f"file:tender-{id(self)}?mode=memory&cache=shared" if self._memory else self.path
+            f"file:tender-{uuid4().hex}?mode=memory&cache=shared" if self._memory else self.path
         )
         self._anchor = sqlite3.connect(self._dsn, uri=self._memory) if self._memory else None
         if not self._memory:
             Path(self.path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self) -> Iterator[sqlite3.Connection]:
+        """One transaction per block; the connection is always closed afterwards."""
         connection = sqlite3.connect(self._dsn, uri=self._memory)
-        connection.row_factory = sqlite3.Row
-        connection.execute("PRAGMA busy_timeout = 5000")
-        if not self._memory:
-            connection.execute("PRAGMA journal_mode = WAL")
-        return connection
+        try:
+            connection.row_factory = sqlite3.Row
+            connection.execute("PRAGMA busy_timeout = 5000")
+            if not self._memory:
+                connection.execute("PRAGMA journal_mode = WAL")
+            with connection:
+                yield connection
+        finally:
+            connection.close()
 
     def _init_schema(self) -> None:
         with self._connect() as db:
@@ -384,10 +394,13 @@ class RunStore:
         now = utcnow()
         lease_expiry = now + timedelta(seconds=lease_seconds)
         with self._connect() as db:
+            # An expired lease is never renewed: once it lapses, recovery may
+            # already have failed the run or another worker may own it.
             changed = db.execute(
                 "UPDATE runs SET lease_expires_at = ?, heartbeat_at = ? "
-                "WHERE id = ? AND status = 'running' AND lease_owner = ?",
-                (lease_expiry.isoformat(), now.isoformat(), run_id, worker_id),
+                "WHERE id = ? AND status = 'running' AND lease_owner = ? "
+                "AND lease_expires_at IS NOT NULL AND lease_expires_at > ?",
+                (lease_expiry.isoformat(), now.isoformat(), run_id, worker_id, now.isoformat()),
             ).rowcount
         return changed == 1
 
@@ -661,17 +674,168 @@ class RunStore:
             row = db.execute(query, parameters).fetchone()
         return int(row["total"])
 
-    def append_event(self, event: RunEvent) -> None:
+    def append_event(self, event: RunEvent, lease_owner: str | None = None) -> None:
+        """Append one audit event; with ``lease_owner`` the write is fenced by the lease."""
         with self._connect() as db:
-            db.execute(
-                "INSERT INTO run_events (run_id, name, timestamp, payload) VALUES (?, ?, ?, ?)",
-                (
-                    str(event.run_id),
-                    event.name,
-                    event.timestamp.isoformat(),
-                    json.dumps(event.payload),
-                ),
-            )
+            if lease_owner is not None:
+                db.execute("BEGIN IMMEDIATE")
+                self._assert_live_lease(db, str(event.run_id), lease_owner)
+            self._insert_event(db, event)
+
+    @staticmethod
+    def _insert_event(db: sqlite3.Connection, event: RunEvent) -> None:
+        db.execute(
+            "INSERT INTO run_events (run_id, name, timestamp, payload) VALUES (?, ?, ?, ?)",
+            (
+                str(event.run_id),
+                event.name,
+                event.timestamp.isoformat(),
+                json.dumps(event.payload),
+            ),
+        )
+
+    def finalize_run(
+        self,
+        run: EvaluationRun,
+        events: list[RunEvent],
+        *,
+        lease_owner: str | None = None,
+        publish: Callable[[], None] | None = None,
+    ) -> None:
+        """Atomically publish artifacts, final events, and the final run record.
+
+        With ``lease_owner`` the lease is checked inside the write transaction
+        before ``publish`` runs, so a stale worker can neither publish artifacts
+        as the current owner nor overwrite an accepted result. ``publish``
+        should be a fast local operation such as a directory rename.
+        """
+        if any(event.run_id != run.id for event in events):
+            raise ValueError("run and event IDs must match")
+        with self._connect() as db:
+            db.execute("BEGIN IMMEDIATE")
+            if lease_owner is not None:
+                self._assert_live_lease(db, str(run.id), lease_owner)
+            if publish is not None:
+                publish()
+            self._save_run(db, run)
+            for event in events:
+                self._insert_event(db, event)
+
+    def aggregate_metrics(self) -> dict[str, Any]:
+        """Workspace metrics computed over every persisted run (no row window)."""
+        with self._connect() as db:
+            statuses = {
+                row["status"]: int(row["total"])
+                for row in db.execute("SELECT status, COUNT(*) AS total FROM runs GROUP BY status")
+            }
+            failures = {
+                str(row["category"]): int(row["total"])
+                for row in db.execute(
+                    "SELECT json_extract(payload, '$.failure_category') AS category, "
+                    "COUNT(*) AS total FROM runs WHERE status = 'failed' GROUP BY category"
+                )
+            }
+            totals = db.execute(
+                "SELECT COUNT(json_extract(payload, '$.latency_ms')) AS latency_count, "
+                "AVG(json_extract(payload, '$.latency_ms')) AS latency_mean, "
+                "TOTAL(json_extract(payload, '$.tool_calls')) AS tool_calls, "
+                "TOTAL(json_extract(payload, '$.input_tokens')) AS input_tokens, "
+                "TOTAL(json_extract(payload, '$.output_tokens')) AS output_tokens, "
+                "SUM(json_extract(payload, '$.cost_usd')) AS cost_sum, "
+                "COUNT(json_extract(payload, '$.cost_usd')) AS cost_count, "
+                "COUNT(json_extract(payload, '$.outcome')) AS outcome_count "
+                "FROM runs"
+            ).fetchone()
+            latency_count = int(totals["latency_count"])
+
+            def latency_at(position: int) -> float:
+                row = db.execute(
+                    "SELECT latency FROM (SELECT json_extract(payload, '$.latency_ms') AS latency "
+                    "FROM runs) WHERE latency IS NOT NULL ORDER BY latency LIMIT 1 OFFSET ?",
+                    (position,),
+                ).fetchone()
+                return float(row["latency"])
+
+            def percentile(fraction: float) -> float | None:
+                if not latency_count:
+                    return None
+                position = (latency_count - 1) * fraction
+                lower, upper = math.floor(position), math.ceil(position)
+                low = latency_at(lower)
+                if lower == upper:
+                    return low
+                return low + (latency_at(upper) - low) * (position - lower)
+
+            def grouped(expression: str) -> dict[str, dict[str, object]]:
+                summary: dict[str, dict[str, object]] = {}
+                for row in db.execute(
+                    f"SELECT {expression} AS name, COUNT(*) AS total, "
+                    "SUM(status = 'passed') AS passed, "
+                    "SUM(status IN ('passed', 'failed')) AS finished, "
+                    "SUM(status = 'failed' AND "
+                    "json_extract(payload, '$.failure_category') = 'provider_error') AS provider "
+                    "FROM runs GROUP BY name ORDER BY name"
+                ):
+                    passed, finished = int(row["passed"] or 0), int(row["finished"] or 0)
+                    summary[str(row["name"])] = {
+                        "runs": int(row["total"]),
+                        "passed": passed,
+                        "pass_rate": passed / finished if finished else 0.0,
+                        "provider_failures": int(row["provider"] or 0),
+                    }
+                return summary
+
+            overall = {
+                str(row["overall"]): int(row["total"])
+                for row in db.execute(
+                    "SELECT json_extract(payload, '$.outcome.overall') AS overall, "
+                    "COUNT(*) AS total FROM runs "
+                    "WHERE json_extract(payload, '$.outcome') IS NOT NULL GROUP BY overall"
+                )
+            }
+            p50, p95 = percentile(0.5), percentile(0.95)
+            by_model = grouped("json_extract(payload, '$.config.model')")
+            by_benchmark = grouped("benchmark_id")
+        total = sum(statuses.values())
+        passed = statuses.get(RunStatus.PASSED.value, 0)
+        terminal = passed + statuses.get(RunStatus.FAILED.value, 0)
+        provider_failures = failures.get(FailureCategory.PROVIDER.value, 0)
+        measured = terminal - provider_failures
+        return {
+            "runs": total,
+            "passed": passed,
+            "pass_rate": passed / terminal if terminal else 0.0,
+            "completed_runs": terminal,
+            "queued_runs": statuses.get(RunStatus.QUEUED.value, 0),
+            "running_runs": statuses.get(RunStatus.RUNNING.value, 0),
+            "awaiting_approval": statuses.get(RunStatus.AWAITING_APPROVAL.value, 0),
+            "cancelled_runs": statuses.get(RunStatus.CANCELLED.value, 0),
+            "provider_failures": provider_failures,
+            "pass_rate_excluding_provider_failures": passed / measured if measured > 0 else None,
+            "average_latency_ms": totals["latency_mean"] if latency_count else None,
+            "latency_p50_ms": round(p50, 1) if p50 is not None else None,
+            "latency_p95_ms": round(p95, 1) if p95 is not None else None,
+            "latency_observations": latency_count,
+            "total_cost_usd": totals["cost_sum"] if int(totals["cost_count"]) else None,
+            "cost_observations": int(totals["cost_count"]),
+            "cost_basis": "provider-reported values only; not a billing record",
+            "total_tool_calls": int(totals["tool_calls"]),
+            "total_input_tokens": int(totals["input_tokens"]),
+            "total_output_tokens": int(totals["output_tokens"]),
+            "failure_categories": dict(sorted(failures.items())),
+            "outcomes": {
+                "runs_with_separate_outcomes": int(totals["outcome_count"]),
+                "overall": dict(sorted(overall.items())),
+            },
+            "by_model": by_model,
+            "by_benchmark": by_benchmark,
+            "coverage": {
+                "scope": "all_runs",
+                "runs_counted": total,
+                "total_runs": total,
+                "truncated": False,
+            },
+        }
 
     def save_run_with_event(
         self, run: EvaluationRun, event: RunEvent, lease_owner: str | None = None

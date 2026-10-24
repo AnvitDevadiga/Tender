@@ -74,3 +74,29 @@ symbol-definition boost (`src/tender/retrieval.py`). It has no inverse document
 frequency or document-length normalization and is not BM25. Historical records
 keep the label they were written with; read `bm25` as "Tender lexical
 retriever". New manifests use `lexical`.
+
+### E8. The v1 public replay reconstructed data that had been recorded
+
+`scripts/record_replay.py` (schema `tender.dashboard.replay.v1`) depended on the
+git-ignored `results/artifacts/` directory, so a fresh clone could not rebuild
+it. It also synthesized four timeline events per run instead of using the
+recorded event streams, which existed in the local run databases. For the
+follow-up run `2a5ce4e0` it went further. It copied configuration from another
+run and showed retrieval `bm25` and sandbox `local`; the recorded values are
+`text` and `docker`. It reported `tool_calls: 0`, where 14 were recorded, and a
+creation time of `00:00:00Z`, where `15:57:11.986147Z` was recorded.
+
+* **Fixed:** `scripts/export_replay_inputs.py` exported the recorded payloads and
+  587 recorded events once, sanitizing only local artifact paths (each edit is
+  listed). The replay (`tender.dashboard.replay.v2`) is rebuilt
+  deterministically from that committed file, and every value carries a
+  `recorded`, `derived`, or `unknown` label.
+* **Unchanged:** the published experiment JSON and its measurements.
+
+### E9. `/metrics` silently covered at most 1,000 runs
+
+The endpoint aggregated `list_runs(1000)`, so totals, latency percentiles, and
+pass rates were computed over the newest 1,000 runs without saying so.
+**Fixed:** metrics are SQL aggregates over every run, and the response includes
+`coverage`. Provider failures are reported separately, together with a pass rate
+that excludes them.

@@ -65,31 +65,31 @@ async def run_one(
             run.current_state = WorkflowState.FAILED
             run.test_output = f"worker_workspace_error: {type(exc).__name__}: {str(exc)[:300]}"
             try:
-                store.save_run_with_event(
+                store.finalize_run(
                     run,
-                    RunEvent(
-                        run_id=run.id,
-                        name="workflow.state_changed",
-                        payload={
-                            "from": None,
-                            "to": WorkflowState.FAILED.value,
-                            "summary": "Worker rejected the queued workspace.",
-                        },
-                    ),
+                    [
+                        RunEvent(
+                            run_id=run.id,
+                            name="workflow.state_changed",
+                            payload={
+                                "from": None,
+                                "to": WorkflowState.FAILED.value,
+                                "summary": "Worker rejected the queued workspace.",
+                            },
+                        ),
+                        RunEvent(
+                            run_id=run.id,
+                            name="workflow.finished",
+                            payload={
+                                "status": run.status.value,
+                                "failure_category": run.failure_category.value,
+                            },
+                        ),
+                    ],
                     lease_owner=owner,
                 )
             except LeaseLost:
                 return store.get_run(str(run.id)) or run
-            store.append_event(
-                RunEvent(
-                    run_id=run.id,
-                    name="workflow.finished",
-                    payload={
-                        "status": run.status.value,
-                        "failure_category": run.failure_category.value,
-                    },
-                )
-            )
             return run
 
         service = RunService(

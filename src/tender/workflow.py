@@ -37,6 +37,7 @@ from .sandbox import (
 )
 from .snapshot import TrustedRepository, run_safe_git
 from .state import WorkflowState, WorkflowStateMachine
+from .store import LeaseLost
 from .tools import AgentToolbox, resolve_tool_allowlist
 
 #: An attempt is abandoned after this many unauthorized tool requests.
@@ -375,7 +376,8 @@ class AgentWorkflow:
                 tool_allowlist,
                 started,
             )
-        except asyncio.CancelledError:
+        except (asyncio.CancelledError, LeaseLost):
+            # Kill every live subprocess before propagating; nothing keeps running.
             self._budget.cancel()
             raise
         finally:
@@ -664,6 +666,9 @@ class AgentWorkflow:
                             ],
                         },
                     )
+            except LeaseLost:
+                # A stale worker must stop immediately, not record an attempt error.
+                raise
             except (
                 ValueError,
                 RuntimeError,
@@ -671,6 +676,8 @@ class AgentWorkflow:
                 subprocess.SubprocessError,
                 SandboxUnavailable,
             ) as exc:
+                if isinstance(exc, AgentGenerationError) and isinstance(exc.cause, LeaseLost):
+                    raise exc.cause from None
                 if isinstance(exc, AgentGenerationError):
                     partial = exc.generation
                     input_tokens += partial.input_tokens

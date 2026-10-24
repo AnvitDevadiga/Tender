@@ -6,7 +6,7 @@ from pathlib import Path
 from time import perf_counter
 
 from .artifacts import ArtifactStore
-from .models import EvaluationRun, FailureCategory, RunEvent, RunStatus
+from .models import EvaluationRun, FailureCategory, RunEvent, RunStatus, utcnow
 from .outcomes import EvaluationOutcome
 from .providers import DeterministicProvider, ModelProvider
 from .repository import RepositoryError
@@ -54,6 +54,7 @@ class RunService:
         self.store = store or RunStore()
         self.artifacts = artifacts or ArtifactStore()
         self.runs: dict[str, EvaluationRun] = {}
+        self._leases: dict[str, str | None] = {}
         self.require_pinned_commit = (
             _env_flag("TENDER_REQUIRE_PINNED_COMMIT")
             if require_pinned_commit is None
@@ -82,7 +83,12 @@ class RunService:
     def _event(
         self, run: EvaluationRun, name: str, payload: dict[str, object] | None = None
     ) -> None:
-        self.store.append_event(RunEvent(run_id=run.id, name=name, payload=payload or {}))
+        # Every event a worker writes is fenced by its lease: a worker whose lease
+        # expired cannot publish evidence as the current owner.
+        self.store.append_event(
+            RunEvent(run_id=run.id, name=name, payload=payload or {}),
+            lease_owner=self._leases.get(str(run.id)),
+        )
 
     def _workflow_event(
         self,
@@ -109,6 +115,19 @@ class RunService:
         already_claimed: bool = False,
         lease_owner: str | None = None,
     ) -> EvaluationRun:
+        self._leases[str(run.id)] = lease_owner
+        try:
+            return await self._execute(run, workspace, already_claimed, lease_owner)
+        finally:
+            self._leases.pop(str(run.id), None)
+
+    async def _execute(
+        self,
+        run: EvaluationRun,
+        workspace: str,
+        already_claimed: bool,
+        lease_owner: str | None,
+    ) -> EvaluationRun:
         started = perf_counter()
         if already_claimed:
             if run.status is not RunStatus.RUNNING:
@@ -119,6 +138,8 @@ class RunService:
             if claimed is None:
                 return self.store.get_run(str(run.id)) or run
             run = claimed
+        claimed_at = utcnow()
+        queue_ms = max(0, round((claimed_at - run.created_at).total_seconds() * 1000))
         self._event(
             run,
             "workflow.started",
@@ -202,29 +223,36 @@ class RunService:
             run.latency_ms = round((perf_counter() - started) * 1000)
             run.test_output = f"workflow_error: {type(exc).__name__}: {str(exc)[:500]}"
             try:
-                self.store.save_run_with_event(
+                self.store.finalize_run(
                     run,
-                    RunEvent(
-                        run_id=run.id,
-                        name="workflow.state_changed",
-                        payload={
-                            "from": previous_state,
-                            "to": WorkflowState.FAILED.value,
-                            "summary": "Unhandled workflow error stopped execution.",
-                        },
-                    ),
+                    [
+                        RunEvent(
+                            run_id=run.id,
+                            name="workflow.state_changed",
+                            payload={
+                                "from": previous_state,
+                                "to": WorkflowState.FAILED.value,
+                                "summary": "Unhandled workflow error stopped execution.",
+                            },
+                        ),
+                        RunEvent(
+                            run_id=run.id,
+                            name="workflow.error",
+                            payload={"error_type": type(exc).__name__, "message": str(exc)[:500]},
+                        ),
+                        RunEvent(
+                            run_id=run.id,
+                            name="workflow.finished",
+                            payload={
+                                "status": run.status.value,
+                                "failure_category": run.failure_category.value,
+                            },
+                        ),
+                    ],
                     lease_owner=lease_owner,
                 )
             except LeaseLost:
                 return self.store.get_run(str(run.id)) or run
-            self._event(
-                run, "workflow.error", {"error_type": type(exc).__name__, "message": str(exc)[:500]}
-            )
-            self._event(
-                run,
-                "workflow.finished",
-                {"status": run.status.value, "failure_category": run.failure_category.value},
-            )
             self.runs[str(run.id)] = run
             return run
         if result.awaiting_approval:
@@ -239,7 +267,11 @@ class RunService:
         run.latency_ms = round((perf_counter() - started) * 1000)
         run.tool_calls = result.tool_calls
         run.outcome = result.outcome
-        run.metadata["timing_ms"] = dict(result.timing_ms)
+        run.metadata["timing_ms"] = {
+            "queue": queue_ms,
+            **result.timing_ms,
+            "service_wall_clock": round((perf_counter() - started) * 1000),
+        }
         run.metadata["counters"] = dict(result.counters)
         run.metadata["cost"] = {
             "provider_reported_usd": result.cost_usd,
@@ -257,55 +289,97 @@ class RunService:
         )
         artifact_path = self.artifacts.path_for(run)
         run.metadata["artifact_path"] = str(artifact_path)
-        try:
-            self.artifacts.write(run, result)
-        except OSError as exc:
-            run.status = RunStatus.FAILED
-            run.failure_category = FailureCategory.TOOLING
-            run.test_output = f"artifact_error: {type(exc).__name__}: {str(exc)[:500]}"
-            previous_state = run.current_state
-            run.current_state = WorkflowState.FAILED
-            try:
-                self.store.save_run_with_event(
-                    run,
-                    RunEvent(
-                        run_id=run.id,
-                        name="workflow.state_changed",
-                        payload={
-                            "from": previous_state.value if previous_state else None,
-                            "to": WorkflowState.FAILED.value,
-                            "summary": "Required run artifacts could not be written.",
-                        },
-                    ),
-                    lease_owner=lease_owner,
-                )
-            except LeaseLost:
-                return self.store.get_run(str(run.id)) or run
-            self._event(
-                run, "artifact.error", {"error_type": type(exc).__name__, "message": str(exc)[:500]}
-            )
-        for attempt in result.attempts:
-            self._event(
-                run,
-                "attempt.finished",
-                {
+        final_events = [
+            RunEvent(
+                run_id=run.id,
+                name="attempt.finished",
+                payload={
                     "attempt": attempt.number,
                     "passed": attempt.grade.passed,
                     "reason": attempt.grade.reason,
                     "tool_calls": attempt.tool_calls,
                 },
             )
-        self._event(
-            run,
-            "workflow.finished",
-            {
-                "status": run.status.value,
-                "failure_category": run.failure_category.value,
-                "artifact_path": str(artifact_path),
-            },
+            for attempt in result.attempts
+        ]
+        final_events.append(
+            RunEvent(
+                run_id=run.id,
+                name="workflow.finished",
+                payload={
+                    "status": run.status.value,
+                    "failure_category": run.failure_category.value,
+                    "artifact_path": str(artifact_path),
+                    "overall": run.outcome.overall.value if run.outcome else None,
+                },
+            )
         )
+        staged = None
         try:
-            self.store.save_run(run, lease_owner=lease_owner)
+            staged = self.artifacts.stage(
+                run, result, events=[*self.store.get_events(str(run.id)), *final_events]
+            )
+            # Artifacts, final events, and the final result commit together, and
+            # only while this worker still holds a live lease.
+            self.store.finalize_run(
+                run,
+                final_events,
+                lease_owner=lease_owner,
+                publish=lambda: self.artifacts.publish(staged, run),
+            )
+        except LeaseLost:
+            self.artifacts.discard(staged)
+            return self.store.get_run(str(run.id)) or run
+        except OSError as exc:
+            self.artifacts.discard(staged)
+            return self._artifact_failure(run, exc, final_events, lease_owner)
+        self.runs[str(run.id)] = run
+        return run
+
+    def _artifact_failure(
+        self,
+        run: EvaluationRun,
+        exc: OSError,
+        final_events: list[RunEvent],
+        lease_owner: str | None,
+    ) -> EvaluationRun:
+        previous_state = run.current_state
+        run.status = RunStatus.FAILED
+        run.failure_category = FailureCategory.TOOLING
+        run.test_output = f"artifact_error: {type(exc).__name__}: {str(exc)[:500]}"
+        run.current_state = WorkflowState.FAILED
+        run.metadata.pop("artifact_path", None)
+        if run.outcome is not None:
+            run.outcome.environment = "error"
+            run.outcome.reasons.append("artifact publication failed")
+            run.outcome.finalize()
+        events = [
+            RunEvent(
+                run_id=run.id,
+                name="workflow.state_changed",
+                payload={
+                    "from": previous_state.value if previous_state else None,
+                    "to": WorkflowState.FAILED.value,
+                    "summary": "Required run artifacts could not be written.",
+                },
+            ),
+            RunEvent(
+                run_id=run.id,
+                name="artifact.error",
+                payload={"error_type": type(exc).__name__, "message": str(exc)[:500]},
+            ),
+            *[event for event in final_events if event.name == "attempt.finished"],
+            RunEvent(
+                run_id=run.id,
+                name="workflow.finished",
+                payload={
+                    "status": run.status.value,
+                    "failure_category": run.failure_category.value,
+                },
+            ),
+        ]
+        try:
+            self.store.finalize_run(run, events, lease_owner=lease_owner)
         except LeaseLost:
             return self.store.get_run(str(run.id)) or run
         self.runs[str(run.id)] = run
@@ -331,27 +405,36 @@ class RunService:
             reasons=[f"policy_rejection: {reason[:500]}"],
         ).finalize()
         try:
-            self.store.save_run_with_event(
+            self.store.finalize_run(
                 run,
-                RunEvent(
-                    run_id=run.id,
-                    name="workflow.state_changed",
-                    payload={
-                        "from": previous_state,
-                        "to": WorkflowState.FAILED.value,
-                        "summary": "Repository policy rejected the run before execution.",
-                    },
-                ),
+                [
+                    RunEvent(
+                        run_id=run.id,
+                        name="workflow.state_changed",
+                        payload={
+                            "from": previous_state,
+                            "to": WorkflowState.FAILED.value,
+                            "summary": "Repository policy rejected the run before execution.",
+                        },
+                    ),
+                    RunEvent(
+                        run_id=run.id,
+                        name="workflow.rejected",
+                        payload={"reason": reason[:500], "provider_calls": 0},
+                    ),
+                    RunEvent(
+                        run_id=run.id,
+                        name="workflow.finished",
+                        payload={
+                            "status": run.status.value,
+                            "failure_category": run.failure_category.value,
+                        },
+                    ),
+                ],
                 lease_owner=lease_owner,
             )
         except LeaseLost:
             return self.store.get_run(str(run.id)) or run
-        self._event(run, "workflow.rejected", {"reason": reason[:500], "provider_calls": 0})
-        self._event(
-            run,
-            "workflow.finished",
-            {"status": run.status.value, "failure_category": run.failure_category.value},
-        )
         self.runs[str(run.id)] = run
         return run
 

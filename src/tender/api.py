@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import json
-import math
 import os
 import time
 from contextlib import asynccontextmanager
@@ -11,6 +10,7 @@ from typing import Any, AsyncIterator
 from fastapi import FastAPI, Header, HTTPException, Query, Response
 from fastapi.staticfiles import StaticFiles
 
+from . import __version__
 from .github import GitHubIssueClient
 from .models import (
     CreateRunRequest,
@@ -216,7 +216,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="Tender", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Tender", version=__version__, lifespan=lifespan)
 app.add_middleware(
     RequestSizeLimitMiddleware,
     max_bytes=max(
@@ -228,10 +228,22 @@ app.add_middleware(RateLimitMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 workspace_root_value = os.getenv("TENDER_WORKSPACE_ROOT")
 workspace_root = Path(workspace_root_value).expanduser().resolve() if workspace_root_value else None
-dashboard_path = Path(__file__).resolve().parents[2] / "dashboard"
-if dashboard_path.is_dir():
-    assets_path = Path(__file__).resolve().parents[2] / "assets"
-    if assets_path.is_dir():
+
+
+def web_root() -> tuple[Path | None, Path | None]:
+    """Locate the dashboard: packaged copy first, then a source checkout."""
+    package = Path(__file__).resolve().parent / "web"
+    if (package / "dashboard" / "index.html").is_file():
+        return package / "dashboard", package / "assets"
+    checkout = Path(__file__).resolve().parents[2]
+    if (checkout / "dashboard" / "index.html").is_file():
+        return checkout / "dashboard", checkout / "assets"
+    return None, None
+
+
+dashboard_path, assets_path = web_root()
+if dashboard_path is not None:
+    if assets_path is not None and assets_path.is_dir():
         app.mount("/dashboard/assets", StaticFiles(directory=assets_path), name="dashboard-assets")
     app.mount("/dashboard", StaticFiles(directory=dashboard_path, html=True), name="dashboard")
 
@@ -458,69 +470,7 @@ async def get_run_artifact(run_id: str) -> dict[str, object]:
     }
 
 
-def _percentile(values: list[int], fraction: float) -> float | None:
-    if not values:
-        return None
-    ordered = sorted(values)
-    position = (len(ordered) - 1) * fraction
-    lower, upper = math.floor(position), math.ceil(position)
-    if lower == upper:
-        return float(ordered[lower])
-    return ordered[lower] + (ordered[upper] - ordered[lower]) * (position - lower)
-
-
-def _group_runs(runs: list[EvaluationRun], key: Any) -> dict[str, dict[str, object]]:
-    grouped: dict[str, list[EvaluationRun]] = {}
-    for run in runs:
-        grouped.setdefault(str(key(run)), []).append(run)
-    summary: dict[str, dict[str, object]] = {}
-    for name, members in sorted(grouped.items()):
-        passed = sum(run.status is RunStatus.PASSED for run in members)
-        finished = sum(run.status in {RunStatus.PASSED, RunStatus.FAILED} for run in members)
-        summary[name] = {
-            "runs": len(members),
-            "passed": passed,
-            "pass_rate": passed / finished if finished else 0.0,
-        }
-    return summary
-
-
 @app.get("/metrics")
 async def get_metrics() -> dict[str, object]:
-    runs = service.store.list_runs(1000)
-    passed = sum(run.status == RunStatus.PASSED for run in runs)
-    terminal_runs = sum(run.status in {RunStatus.PASSED, RunStatus.FAILED} for run in runs)
-    queued_runs = sum(run.status == RunStatus.QUEUED for run in runs)
-    running_runs = sum(run.status == RunStatus.RUNNING for run in runs)
-    awaiting_approval = sum(run.status == RunStatus.AWAITING_APPROVAL for run in runs)
-    cancelled_runs = sum(run.status == RunStatus.CANCELLED for run in runs)
-    failures: dict[str, int] = {}
-    for run in runs:
-        if run.status == RunStatus.FAILED:
-            key = run.failure_category.value
-            failures[key] = failures.get(key, 0) + 1
-    latencies = [run.latency_ms for run in runs if run.latency_ms is not None]
-    reported_costs = [run.cost_usd for run in runs if run.cost_usd is not None]
-    latency_p50 = _percentile(latencies, 0.5)
-    latency_p95 = _percentile(latencies, 0.95)
-    return {
-        "runs": len(runs),
-        "passed": passed,
-        "pass_rate": passed / terminal_runs if terminal_runs else 0.0,
-        "completed_runs": terminal_runs,
-        "queued_runs": queued_runs,
-        "running_runs": running_runs,
-        "awaiting_approval": awaiting_approval,
-        "cancelled_runs": cancelled_runs,
-        "average_latency_ms": sum(latencies) / len(latencies) if latencies else None,
-        "latency_p50_ms": round(latency_p50, 1) if latency_p50 is not None else None,
-        "latency_p95_ms": round(latency_p95, 1) if latency_p95 is not None else None,
-        "total_cost_usd": sum(reported_costs) if reported_costs else None,
-        "cost_observations": len(reported_costs),
-        "total_tool_calls": sum(run.tool_calls for run in runs),
-        "total_input_tokens": sum(run.input_tokens for run in runs),
-        "total_output_tokens": sum(run.output_tokens for run in runs),
-        "failure_categories": dict(sorted(failures.items())),
-        "by_model": _group_runs(runs, lambda run: run.config.model),
-        "by_benchmark": _group_runs(runs, lambda run: run.benchmark_id),
-    }
+    """Aggregate every persisted run with SQL; the response states its coverage."""
+    return service.store.aggregate_metrics()

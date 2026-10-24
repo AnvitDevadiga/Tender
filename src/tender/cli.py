@@ -8,7 +8,7 @@ from pathlib import Path
 
 from .experiments import BenchmarkTask, ExperimentManifest
 from .providers import GroqProvider
-from .runner import compare_experiment_results, run_experiment_sync
+from .runner import LiveProviderNotAuthorized, compare_experiment_results, run_experiment_sync
 from .worker import serve as serve_worker
 
 
@@ -37,6 +37,11 @@ def main() -> int:
     parser.add_argument("--dataset")
     parser.add_argument("--output", default="results.json")
     parser.add_argument("--results", nargs="+")
+    parser.add_argument(
+        "--authorize-live-provider",
+        action="store_true",
+        help="Allow run-experiment to call a billable provider within the manifest budget.",
+    )
     args = parser.parse_args()
     if args.command == "check-groq":
         return asyncio.run(_check_groq())
@@ -59,7 +64,15 @@ def main() -> int:
     if args.command == "run-experiment":
         if not args.manifest or not args.dataset:
             parser.error("run-experiment requires --manifest and --dataset")
-        result = run_experiment_sync(args.manifest, args.dataset, args.output)
+        try:
+            result = run_experiment_sync(
+                args.manifest,
+                args.dataset,
+                args.output,
+                authorize_live_provider=args.authorize_live_provider,
+            )
+        except LiveProviderNotAuthorized as exc:
+            parser.error(str(exc))
         print(f"Experiment complete: {result['summary']}")
         return 0
     if args.command == "validate-benchmark":

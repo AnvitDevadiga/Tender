@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # historical-record integrity tests compare against the audited commit
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
@@ -28,6 +30,8 @@ jobs:
         run: python -m compileall -q src tests
       - name: Run offline test suite
         run: pytest -q
+      - name: Check the public replay rebuilds from committed inputs
+        run: python scripts/record_replay.py --check
       - name: Validate pinned benchmark dataset
         run: python -m tender validate-benchmark --manifest experiments/retry-ablation-v1.toml --dataset benchmarks/tasks.jsonl
 
