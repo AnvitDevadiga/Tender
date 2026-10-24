@@ -16,6 +16,7 @@ recorded as "no isolation" in the report.
 
 from __future__ import annotations
 
+import ast
 import hashlib
 import json
 import re
@@ -39,6 +40,7 @@ from .integrity import (
     EvaluatorConfigError,
     IntegrityPolicy,
     check_patch_paths,
+    matches,
     restore_evaluator_paths,
 )
 from .outcomes import CheckOutcome, EvaluationOutcome
@@ -69,14 +71,36 @@ class CheckSpec(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     pytest: list[str] | None = Field(default=None, max_length=200)
     command: str | None = Field(default=None, min_length=1, max_length=2000)
+    #: Exact test IDs the evaluator requires; overrides automatic coverage discovery.
+    expected_tests: list[str] | None = Field(default=None, max_length=5000)
+    #: "base" (default): required coverage comes from evaluator-controlled sources.
+    #: "candidate": the evaluator explicitly accepts the candidate's own collection.
+    coverage: Literal["base", "candidate"] = "base"
 
     @model_validator(mode="after")
     def _one_kind(self) -> CheckSpec:
         if (self.pytest is None) == (self.command is None):
             raise ValueError(f"check {self.name!r} needs exactly one of 'pytest' or 'command'")
-        for node in self.pytest or []:
+        for node in [*(self.pytest or []), *(self.expected_tests or [])]:
             if not _NODE_ID.fullmatch(node) or ".." in node.split("::")[0].split("/"):
                 raise ValueError(f"check {self.name!r} has an invalid pytest selector: {node!r}")
+        selectors = self.pytest or []
+        for index, first in enumerate(selectors):
+            for second in selectors[index + 1 :]:
+                if _selector_matches(first, second) or _selector_matches(second, first):
+                    raise ValueError(
+                        f"check {self.name!r} has overlapping selectors {first!r} and {second!r}"
+                    )
+        if self.expected_tests is not None:
+            if self.pytest is None:
+                raise ValueError(f"check {self.name!r}: expected_tests needs pytest selectors")
+            if len(set(self.expected_tests)) != len(self.expected_tests):
+                raise ValueError(f"check {self.name!r} lists duplicate expected_tests")
+            for node in self.expected_tests:
+                if not any(_selector_matches(node, selector) for selector in selectors):
+                    raise ValueError(
+                        f"check {self.name!r}: expected test {node!r} is outside its selectors"
+                    )
         return self
 
 
@@ -376,13 +400,25 @@ def _selector_matches(node_id: str, selector: str) -> bool:
     return node_id == selector or node_id.startswith((selector + "::", selector + "["))
 
 
+def _int_attribute(element: ElementTree.Element, name: str) -> int | None:
+    value = element.get(name)
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return -1
+
+
 def junit_node_ids(xml_text: str) -> tuple[list[tuple[str, str]], list[str]]:
-    """Rebuild full pytest node IDs from an xunit1 JUnit report.
+    """Rebuild full pytest node IDs from an xunit1 JUnit report and check its totals.
 
     pytest writes ``classname`` as the dotted module path plus any class names
     and ``name`` as the function name with its parameter ID; ``file`` is the
-    test file. Returns ((node_id, status) ..., problems). A case whose class
-    name does not belong to its file is reported as inconsistent, not guessed.
+    test file. Each suite's declared ``tests``, ``failures``, ``errors``, and
+    ``skipped`` totals must equal the test cases it actually contains, so a
+    report cannot declare results it does not show. Returns
+    ((node_id, status) ..., problems).
     """
     problems: list[str] = []
     cases: list[tuple[str, str]] = []
@@ -392,29 +428,67 @@ def junit_node_ids(xml_text: str) -> tuple[list[tuple[str, str]], list[str]]:
         return [], ["JUnit report is not valid XML"]
     if root.tag not in {"testsuites", "testsuite"}:
         return [], ["JUnit report has an unexpected root element"]
-    for case in root.iter("testcase"):
-        file = case.get("file") or ""
-        classname = case.get("classname") or ""
-        name = case.get("name") or ""
-        if not file.endswith(".py") or not name:
-            problems.append(f"test case without file or name: {classname}.{name}")
-            continue
-        module = file[:-3].replace("/", ".")
-        if classname == module:
-            classes: list[str] = []
-        elif classname.startswith(module + "."):
-            classes = classname[len(module) + 1 :].split(".")
-        else:
-            problems.append(f"test case {classname}::{name} does not belong to {file}")
-            continue
-        if case.find("failure") is not None or case.find("error") is not None:
-            status = "failed"
-        elif case.find("skipped") is not None:
-            status = "skipped"
-        else:
-            status = "passed"
-        cases.append(("::".join([file, *classes, name]), status))
+    suites = [root] if root.tag == "testsuite" else root.findall("testsuite")
+    if root.tag == "testsuites" and root.findall(".//testsuite//testsuite"):
+        problems.append("JUnit report nests test suites, which Tender does not accept")
+    if root.tag == "testsuites" and root.findall("testcase"):
+        problems.append("JUnit report has test cases outside any test suite")
+    grand = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+    for suite in suites:
+        counted = {"tests": 0, "failures": 0, "errors": 0, "skipped": 0}
+        for case in suite.findall("testcase"):
+            counted["tests"] += 1
+            failure = case.find("failure") is not None
+            error = case.find("error") is not None
+            skipped = case.find("skipped") is not None
+            counted["failures"] += failure
+            counted["errors"] += error
+            counted["skipped"] += skipped
+            file = case.get("file") or ""
+            classname = case.get("classname") or ""
+            name = case.get("name") or ""
+            if not file.endswith(".py") or not name:
+                problems.append(f"test case without file or name: {classname}.{name}")
+                continue
+            module = file[:-3].replace("/", ".")
+            if classname == module:
+                classes: list[str] = []
+            elif classname.startswith(module + "."):
+                classes = classname[len(module) + 1 :].split(".")
+            else:
+                problems.append(f"test case {classname}::{name} does not belong to {file}")
+                continue
+            status = "failed" if failure or error else "skipped" if skipped else "passed"
+            cases.append(("::".join([file, *classes, name]), status))
+        for key, value in counted.items():
+            declared = _int_attribute(suite, key)
+            if declared is None:
+                if key == "tests":
+                    problems.append("JUnit test suite does not declare its test count")
+                continue
+            if declared != value:
+                problems.append(
+                    f"JUnit suite declares {key}={declared} but contains {value} matching records"
+                )
+            grand[key] += value
+    if root.tag == "testsuites":
+        for key, value in grand.items():
+            declared = _int_attribute(root, key)
+            if declared is not None and declared != value:
+                problems.append(
+                    f"JUnit report declares {key}={declared} but its suites contain {value}"
+                )
     return cases, problems
+
+
+def _duplicates(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    repeated: list[str] = []
+    for value in values:
+        if value in seen and value not in repeated:
+            repeated.append(value)
+        seen.add(value)
+    return repeated
 
 
 def reconcile_pytest_results(
@@ -422,20 +496,37 @@ def reconcile_pytest_results(
     collected_ids: list[str] | None,
     collect_status: int | None,
     junit_xml: str | None,
-) -> tuple[list[dict[str, str]], list[str]]:
-    """Check every expected test ran exactly once and passed.
+    *,
+    required_ids: list[str] | None,
+) -> tuple[list[dict[str, str]], list[str], dict[str, Any]]:
+    """Check the trusted required tests (and any extra candidate cases) all passed.
 
-    Expected tests come from collection, not from the report, so a result for
-    one test can never stand in for another (TestA.test_x for TestB.test_x).
-    Returns per-selector outcomes and check-level problems; any problem fails
-    the check.
+    ``required_ids`` comes from an evaluator-controlled source (see
+    ``establish_expected_coverage``), never from the candidate workspace, so a
+    candidate cannot shrink what must run. ``collected_ids`` is the candidate
+    workspace's own collection: it is evidence, and any extra cases it adds must
+    pass too. Every expected test must be executed exactly once and pass.
+    Returns per-selector outcomes, check-level problems, and a coverage record.
     """
     problems: list[str] = []
+    if required_ids is None:
+        problems.append("trusted expected coverage is unavailable for this check")
+        required_ids = []
+    duplicate_required = _duplicates(required_ids)
+    if duplicate_required:
+        problems.append(
+            "expected coverage lists duplicate test IDs: " + ", ".join(duplicate_required[:10])
+        )
     if collected_ids is None:
         problems.append("test collection output is missing")
         collected_ids = []
     elif collect_status != 0:
         problems.append(f"test collection failed (exit {collect_status})")
+    duplicate_collected = _duplicates(collected_ids)
+    if duplicate_collected:
+        problems.append(
+            "test collection produced duplicate test IDs: " + ", ".join(duplicate_collected[:10])
+        )
     cases: list[tuple[str, str]] = []
     if junit_xml is None or not junit_xml.strip():
         problems.append("no JUnit report was produced (the test process may have exited early)")
@@ -447,17 +538,22 @@ def reconcile_pytest_results(
     results: dict[str, list[str]] = {}
     for node_id, status in cases:
         results.setdefault(node_id, []).append(status)
+    required = set(required_ids)
+    collected = set(collected_ids)
     expected_all: set[str] = set()
     outcomes: list[dict[str, str]] = []
     for selector in selectors:
-        expected = sorted({node for node in collected_ids if _selector_matches(node, selector)})
+        required_here = {node for node in required if _selector_matches(node, selector)}
+        expected = sorted(
+            required_here | {node for node in collected if _selector_matches(node, selector)}
+        )
         expected_all.update(expected)
         found = {node: results.get(node, []) for node in expected}
         missing = [node for node, seen in found.items() if not seen]
         duplicated = [node for node, seen in found.items() if len(seen) > 1]
         failed = [node for node, seen in found.items() if seen == ["failed"]]
         skipped = [node for node, seen in found.items() if seen == ["skipped"]]
-        if not expected or missing:
+        if not required_here or missing:
             outcome = "missing"
         elif duplicated:
             outcome = "ambiguous"
@@ -477,30 +573,239 @@ def reconcile_pytest_results(
         problems.append(
             "JUnit report lists tests that were not selected: " + ", ".join(unexpected[:10])
         )
-    return outcomes, problems
+    not_collected = sorted(required - collected)
+    if not_collected:
+        problems.append(
+            "the candidate workspace no longer collects required tests: "
+            + ", ".join(not_collected[:10])
+        )
+    executed = sorted(results)
+    coverage = {
+        "expected": sorted(required),
+        "collected": list(collected_ids),
+        "executed": executed,
+        "missing_required": sorted(node for node in required if not results.get(node)),
+        "not_collected_by_candidate": not_collected,
+        "extra_candidate_cases": sorted(collected - required),
+        "duplicate_collected": duplicate_collected,
+    }
+    return outcomes, problems, coverage
 
 
 def _parse_check_output(
-    stdout: str, selectors: list[str]
-) -> tuple[list[dict[str, str]], list[str], str]:
-    """Split sandbox output into (outcomes, problems, human-readable test output)."""
+    stdout: str, selectors: list[str], required_ids: list[str] | None
+) -> tuple[list[dict[str, str]], list[str], dict[str, Any], str]:
+    """Split sandbox output into (outcomes, problems, coverage, readable test output)."""
     before, collect_marker, rest = stdout.partition(COLLECT_MARKER)
     collected_text, junit_marker, junit_xml = rest.partition(JUNIT_MARKER)
-    collected_ids: list[str] | None = None
-    collect_status: int | None = None
-    if collect_marker:
-        lines = collected_text.strip("\n").splitlines()
-        if lines and lines[0].strip().lstrip("-").isdigit():
-            collect_status = int(lines[0].strip())
-            lines = lines[1:]
-        collected_ids = [line.rstrip() for line in lines if _COLLECTED_ID.match(line.rstrip())]
-    outcomes, problems = reconcile_pytest_results(
+    collected_ids, collect_status = (
+        _parse_collection(collected_text) if collect_marker else (None, None)
+    )
+    outcomes, problems, coverage = reconcile_pytest_results(
         selectors,
         collected_ids,
         collect_status,
         junit_xml if junit_marker else None,
+        required_ids=required_ids,
     )
-    return outcomes, problems, before
+    return outcomes, problems, coverage, before
+
+
+def _parse_collection(text: str) -> tuple[list[str], int | None]:
+    """Collected node IDs in order (duplicates kept) and the collection exit status."""
+    lines = text.strip("\n").splitlines()
+    status: int | None = None
+    if lines and lines[0].strip().lstrip("-").isdigit():
+        status = int(lines[0].strip())
+        lines = lines[1:]
+    return [line.rstrip() for line in lines if _COLLECTED_ID.match(line.rstrip())], status
+
+
+# ------------------------------------------------- trusted expected coverage
+
+#: Source text that makes static test enumeration unsafe: test IDs could then
+#: depend on runtime values (parametrization, fixture params, collection hooks).
+_DYNAMIC_COLLECTION = re.compile(
+    r"parametrize|params\s*=|pytest_generate_tests|pytest_collection_modifyitems|"
+    r"pytest_pycollect|pytest_collect_file|importorskip|pytestmark|collect_ignore|"
+    r"__test__|load_tests"
+)
+_COLLECTION_SETTINGS = re.compile(r"python_(files|classes|functions)\s*[=:]")
+
+
+def _static_test_ids(
+    root: Path,
+    selectors: list[str],
+    criteria: AcceptanceCriteria,
+    assets: EvaluatorAssets | None,
+) -> tuple[list[str] | None, str]:
+    """Enumerate test IDs from evaluator-owned source without importing anything.
+
+    Used only when the base commit cannot be collected (for example, a target
+    test for a function that does not exist yet). It refuses whenever test
+    identity could depend on runtime values or on collection customization.
+    """
+    owned_assets = set(assets.paths) if assets else set()
+    for name in ("pyproject.toml", "pytest.ini", "setup.cfg", "tox.ini", "pytest.toml"):
+        config = root / name
+        if config.is_file() and _COLLECTION_SETTINGS.search(config.read_text(errors="replace")):
+            return None, f"{name} customizes test discovery"
+    for conftest in root.rglob("conftest.py"):
+        if ".git" in conftest.parts:
+            continue
+        if _DYNAMIC_COLLECTION.search(conftest.read_text(errors="replace")):
+            relative = conftest.relative_to(root).as_posix()
+            return None, f"{relative} can change which tests are collected"
+    ids: list[str] = []
+    for selector in selectors:
+        file = selector.split("::", 1)[0]
+        if not (matches(file, criteria.integrity.restored_paths) or file in owned_assets):
+            return None, f"{file} is not evaluator-owned, so its source is not trusted"
+        path = root / file
+        if not path.is_file():
+            return None, f"{file} does not exist in the evaluator workspace"
+        source = path.read_text(encoding="utf-8", errors="replace")
+        if _DYNAMIC_COLLECTION.search(source):
+            return None, f"{file} uses dynamic parametrization or collection"
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return None, f"{file} does not parse"
+        found = _ast_tests(tree.body, [file])
+        if found is None:
+            return None, f"{file} uses test-class inheritance, which static enumeration skips"
+        selected = [node for node in found if _selector_matches(node, selector)]
+        if not selected:
+            return None, f"no tests in {file} match {selector}"
+        ids.extend(selected)
+    return ids, "enumerated from evaluator-owned test source"
+
+
+def _ast_tests(body: list[ast.stmt], prefix: list[str]) -> list[str] | None:
+    names: dict[str, None] = {}
+    for node in body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name.startswith(
+            "test"
+        ):
+            names["::".join([*prefix, node.name])] = None
+        elif isinstance(node, ast.ClassDef) and node.name.startswith("Test"):
+            if node.bases or any(
+                isinstance(item, ast.FunctionDef) and item.name == "__init__" for item in node.body
+            ):
+                return None
+            nested = _ast_tests(node.body, [*prefix, node.name])
+            if nested is None:
+                return None
+            names.update(dict.fromkeys(nested))
+    return list(names)
+
+
+def _collect_command(selectors: list[str], python: str) -> str:
+    quoted = " ".join(_shell_quote(node) for node in selectors)
+    return (
+        f"{python} -m pytest -p no:cacheprovider -o addopts= --collect-only -q {quoted} "
+        f"> .tender-collect.txt 2>&1; status=$?; echo '{COLLECT_MARKER}'; echo \"$status\"; "
+        "cat .tender-collect.txt; exit 0"
+    )
+
+
+def establish_expected_coverage(
+    repository: TrustedRepository,
+    base: str,
+    criteria: AcceptanceCriteria,
+    assets: EvaluatorAssets | None,
+    backend: str,
+    python: str,
+) -> dict[str, dict[str, Any]]:
+    """Required test IDs per structured check, from candidate-independent sources.
+
+    Precedence: evaluator-declared ``expected_tests``; collection in a fresh
+    workspace at the base commit with evaluator assets and no patch; static
+    enumeration of evaluator-owned test source; the candidate's own collection
+    only when the evaluator set ``coverage = "candidate"``. Otherwise the check
+    has no trusted coverage and fails closed.
+    """
+    checks = [
+        (f"{kind}[{index}]", spec)
+        for kind, specs in (("target", criteria.target), ("regression", criteria.regression))
+        for index, spec in enumerate(specs)
+        if spec.pytest is not None
+    ]
+    coverage: dict[str, dict[str, Any]] = {}
+    if not checks:
+        return coverage
+    holder = Path(tempfile.mkdtemp(prefix="tender-patch-"))
+    try:
+        root = repository.materialize(base, holder / "repo")
+        if assets is not None:
+            assets.install(root)
+        sandbox = create_sandbox(root, backend, criteria.constraints.timeout_seconds)
+        try:
+            setup_error = None
+            for command in criteria.setup:
+                if not sandbox.run(command).passed:
+                    setup_error = f"setup command failed at the base commit: {command}"
+                    break
+            for key, spec in checks:
+                selectors = spec.pytest or []
+                entry: dict[str, Any] = {"check": spec.name, "selectors": selectors}
+                if setup_error is None:
+                    result = sandbox.run(_collect_command(selectors, python))
+                    marker = COLLECT_MARKER in result.stdout
+                    ids, status = (
+                        _parse_collection(result.stdout.partition(COLLECT_MARKER)[2])
+                        if marker
+                        else ([], None)
+                    )
+                    entry["base_collection"] = {
+                        "status": status,
+                        "ids": ids,
+                        "duplicates": _duplicates(ids),
+                    }
+                    base_ok = status == 0 and ids and not _duplicates(ids)
+                else:
+                    entry["base_collection"] = {"status": None, "ids": [], "error": setup_error}
+                    base_ok = False
+                if spec.expected_tests is not None:
+                    entry.update(
+                        provenance="evaluator_declared", expected=list(spec.expected_tests)
+                    )
+                elif base_ok:
+                    entry.update(provenance="base_commit_collection", expected=ids)
+                else:
+                    static, reason = _static_test_ids(root, selectors, criteria, assets)
+                    if static is not None:
+                        entry.update(provenance="evaluator_source_static", expected=static)
+                        entry["note"] = reason
+                    elif spec.coverage == "candidate":
+                        entry.update(provenance="candidate_collection_authorized", expected=None)
+                        entry["note"] = (
+                            "the evaluator explicitly accepts the candidate's collection"
+                        )
+                    else:
+                        reasons = [
+                            setup_error
+                            or (
+                                "the base commit cannot be collected"
+                                f" (exit {entry['base_collection']['status']})"
+                                if not ids or status != 0
+                                else "the base collection lists duplicate test IDs"
+                            ),
+                            f"static enumeration refused: {reason}",
+                        ]
+                        entry.update(
+                            provenance="unavailable",
+                            expected=None,
+                            reason="; ".join(reasons)
+                            + ". Declare expected_tests for this check, or set "
+                            'coverage = "candidate" to accept the candidate\'s collection.',
+                        )
+                coverage[key] = entry
+        finally:
+            sandbox.destroy()
+    finally:
+        shutil.rmtree(holder, ignore_errors=True)
+    return coverage
 
 
 def _run_group(
@@ -514,8 +819,13 @@ def _run_group(
     assets: EvaluatorAssets | None,
     backend: str,
     python: str,
+    coverage: list[dict[str, Any] | None] | None = None,
 ) -> dict[str, Any]:
-    """Run one check group in a brand-new workspace; the workspace is then deleted."""
+    """Run one check group in a brand-new workspace; the workspace is then deleted.
+
+    ``coverage`` gives each check's trusted required test IDs (aligned with
+    ``checks``), established before any candidate code ran.
+    """
     group: dict[str, Any] = {"kind": kind, "checks": []}
     holder = Path(tempfile.mkdtemp(prefix="tender-patch-"))
     started = perf_counter()
@@ -558,8 +868,9 @@ def _run_group(
                     group["environment_failed"] = True
                     group["note"] = "A setup command failed; checks did not run."
                     return group
-            failed = timed_out = False
-            for spec in checks:
+            failed = timed_out = unavailable = False
+            for index, spec in enumerate(checks):
+                trusted = coverage[index] if coverage else None
                 nonce = uuid.uuid4().hex[:12]
                 command, report = _check_command(spec, python, nonce)
                 result = sandbox.run(command)
@@ -568,7 +879,22 @@ def _run_group(
                 )
                 record["executed"] = command
                 if report is not None:
-                    tests, problems, stdout = _parse_check_output(result.stdout, spec.pytest or [])
+                    provenance = trusted.get("provenance") if trusted else "unavailable"
+                    required = trusted.get("expected") if trusted else None
+                    if provenance == "candidate_collection_authorized":
+                        collected, _ = _parse_collection(
+                            result.stdout.partition(COLLECT_MARKER)[2].partition(JUNIT_MARKER)[0]
+                        )
+                        required = list(dict.fromkeys(collected))
+                    tests, problems, check_coverage, stdout = _parse_check_output(
+                        result.stdout, spec.pytest or [], required
+                    )
+                    check_coverage["provenance"] = provenance
+                    if trusted and trusted.get("reason"):
+                        check_coverage["unavailable_reason"] = trusted["reason"]
+                        record["coverage_unavailable"] = True
+                        unavailable = True
+                    record["coverage"] = check_coverage
                     record["tests"] = tests
                     record["stdout"] = sanitize_text(stdout[-4000:])
                     if problems:
@@ -586,7 +912,20 @@ def _run_group(
                 group["checks"].append(record)
                 timed_out = timed_out or result.timed_out
                 failed = failed or not record["passed"]
-            group["status"] = "error" if timed_out else ("failed" if failed else "passed")
+            real_failure = any(
+                not check.get("passed") and not check.get("coverage_unavailable")
+                for check in group["checks"]
+            )
+            if timed_out:
+                group["status"] = "error"
+            elif real_failure:
+                group["status"] = "failed"
+            elif unavailable:
+                # Fail closed: without trusted coverage a pass cannot be claimed.
+                group["status"] = "error"
+                group["note"] = "Trusted expected test coverage could not be established."
+            else:
+                group["status"] = "failed" if failed else "passed"
             group["timed_out"] = timed_out
         finally:
             sandbox.destroy()
@@ -769,6 +1108,19 @@ def evaluate_patch(
                 backend = sandbox
                 if backend == "docker" and not docker_available():
                     raise SandboxUnavailable("Docker daemon is not reachable; refusing to run")
+                stage = perf_counter()
+                expected = establish_expected_coverage(
+                    repository, commit, criteria, assets, backend, interpreter
+                )
+                timing["expected_coverage"] = round((perf_counter() - stage) * 1000)
+                report["coverage"] = expected
+                target_coverage = [
+                    expected.get(f"target[{index}]") for index in range(len(criteria.target))
+                ]
+                regression_coverage = [
+                    expected.get(f"regression[{index}]")
+                    for index in range(len(criteria.regression))
+                ]
                 if criteria.constraints.check_baseline:
                     stage = perf_counter()
                     baseline = _run_group(
@@ -782,6 +1134,7 @@ def evaluate_patch(
                         assets,
                         backend,
                         interpreter,
+                        target_coverage,
                     )
                     timing["baseline"] = round((perf_counter() - stage) * 1000)
                     baseline["note"] = (
@@ -809,6 +1162,7 @@ def evaluate_patch(
                     assets,
                     backend,
                     interpreter,
+                    target_coverage,
                 )
                 timing["target_verification"] = round((perf_counter() - stage) * 1000)
                 report["target"] = target
@@ -817,9 +1171,26 @@ def evaluate_patch(
                 integrity["evaluator_sections"] = target.get("evaluator_sections", [])
                 integrity["tested_as_submitted"] = target.get("tested_as_submitted")
                 outcome.target = _group_outcome(target)
+                candidate_coverage = [
+                    entry["check"]
+                    for entry in expected.values()
+                    if entry.get("provenance") == "candidate_collection_authorized"
+                ]
                 outcome.independently_verified = bool(
-                    target.get("pristine") and target.get("status") == "passed"
+                    target.get("pristine")
+                    and target.get("status") == "passed"
+                    and not any(
+                        (item or {}).get("provenance") == "candidate_collection_authorized"
+                        for item in target_coverage
+                    )
                 )
+                if candidate_coverage:
+                    report["unknowns"].append(
+                        "Required test coverage for "
+                        + ", ".join(candidate_coverage)
+                        + " came from the candidate's own collection (evaluator-authorized); "
+                        "the candidate could have reduced it."
+                    )
                 if criteria.regression:
                     stage = perf_counter()
                     regression = _run_group(
@@ -833,6 +1204,7 @@ def evaluate_patch(
                         assets,
                         backend,
                         interpreter,
+                        regression_coverage,
                     )
                     timing["regression_verification"] = round((perf_counter() - stage) * 1000)
                     report["regression"] = regression
@@ -923,6 +1295,20 @@ def _explain(report: dict[str, Any]) -> list[str]:
                 continue
             if check.get("passed"):
                 continue
+            coverage = check.get("coverage") or {}
+            if coverage.get("unavailable_reason"):
+                lines.append(
+                    f"{label} check “{check['name']}” not evaluated: trusted expected test "
+                    f"coverage could not be established ({coverage['unavailable_reason']})"
+                )
+                continue
+            if coverage.get("not_collected_by_candidate"):
+                lines.append(
+                    f"{label} check “{check['name']}”: the patch removed required tests "
+                    f"({', '.join(coverage['not_collected_by_candidate'][:10])}); required "
+                    f"coverage comes from {coverage.get('provenance')}."
+                )
+                continue
             failing = [
                 test.get("failing_cases") or test["id"]
                 for test in check.get("tests", [])
@@ -975,7 +1361,12 @@ def _summary(report: dict[str, Any]) -> str:
         return f"Rejected: {' and '.join(failed)} checks failed with the patch applied."
     if overall == "error":
         return "Not evaluated: the environment could not run the checks."
-    return "Inconclusive: the checks did not finish within their limits."
+    if outcome.get("timed_out"):
+        return "Inconclusive: the checks did not finish within their limits."
+    return (
+        "Inconclusive: the checks passed, but the required test coverage was not "
+        "established independently of the candidate."
+    )
 
 
 def _write_outputs(

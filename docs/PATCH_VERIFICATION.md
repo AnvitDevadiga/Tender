@@ -62,6 +62,8 @@ setup = []                      # optional, e.g. ["python3 -m pip install -e ."]
 [[target]]                      # at least one
 name = "even-length median"
 pytest = ["tests/test_median_target.py::test_median_even_length_averages_middle_values"]
+# expected_tests = ["..."]      # optional: required test IDs, overriding discovery
+# coverage = "candidate"        # optional: accept the candidate's collection (never "verified")
 
 [[regression]]                  # optional; without it regression is "not configured"
 name = "existing behaviour"
@@ -89,15 +91,38 @@ python = "python3"
 ```
 
 **`pytest` checks are stronger than `command` checks.** Selectors may name a
-file, a class, a function, or an exact parametrized test. Tender first runs
-`pytest --collect-only` on them to establish the expected test IDs, then runs
-them with `-o addopts=` and a JUnit report. Results are matched by full node ID,
-including class and parameter, so `TestA::test_x` never stands in for
-`TestB::test_x`. Every expected test must appear exactly once and pass. Missing,
-duplicated (ambiguous), skipped, or failed results fail the check, as do an
-empty, malformed, or inconsistent report, results for tests that were not
-selected, or a failed collection. This holds even if the exit status was 0.
-Failing tests are listed by ID.
+file, a class, a function, or an exact parametrized test (selectors in one check
+must not overlap). Results are matched by full node ID, including class and
+parameter, so `TestA::test_x` never stands in for `TestB::test_x`.
+
+**Required coverage is set before the candidate runs.** Parametrized test IDs
+can depend on application values (`@pytest.mark.parametrize("n", CASES)`), so
+the candidate's own collection cannot define what must pass. For each check,
+Tender establishes the required test IDs from, in order:
+
+1. `expected_tests`, an explicit list in the criteria;
+2. `pytest --collect-only` in a fresh workspace at the base commit, with
+   evaluator assets installed and no patch applied (`base_commit_collection`);
+3. static enumeration of evaluator-owned test source, used when the base cannot
+   be collected (for example, a test for a function the patch adds). It is
+   refused whenever test identity could depend on runtime values:
+   parametrization, fixture `params`, collection hooks, inheritance, or custom
+   discovery settings (`evaluator_source_static`);
+4. the candidate's collection, only if the check sets `coverage = "candidate"`.
+   The result is then never reported as independently verified, so an
+   all-passing run is `inconclusive`.
+
+If none applies, the check fails closed (`error`) with the reason and these
+options. The report records, per check, the provenance and the expected,
+collected, and executed IDs, plus required cases the candidate stopped
+collecting or never ran. Extra cases the candidate adds must pass too.
+
+Every expected test must be reported exactly once and pass, and the process
+must exit 0. Missing, duplicated, skipped, or failed results fail the check. So
+do duplicate collected IDs, results for tests that were not selected, a failed
+collection, and an empty, malformed, or inconsistent report. A report is
+inconsistent when its declared `tests`, `failures`, `errors`, or `skipped`
+totals differ from the test cases it actually contains.
 
 `evaluator_sections` names the test-runner section of mixed-purpose files.
 Only that section is reset to the base commit; the rest of the file is tested

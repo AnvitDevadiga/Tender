@@ -172,3 +172,31 @@ async def test_agent_workflow_verifies_in_docker(tmp_path, monkeypatch) -> None:
     assert finished.outcome.independently_verified is True
     assert finished.metadata["source_unchanged"] is True
     assert _containers() == before
+
+
+def test_shrinking_parametrized_coverage_is_rejected_in_docker(tmp_path, monkeypatch) -> None:
+    """Regression for candidate-controlled collection: CASES = [1, 2] -> [1] without a fix."""
+    from test_trusted_coverage import APP, PARAM_TESTS, TARGET_PARAM, T, build, patch_for, run_eval
+
+    monkeypatch.setenv("TENDER_SANDBOX_IMAGE", IMAGE)
+    repo, commit = build(tmp_path, {"app.py": APP, T: PARAM_TESTS})
+    shrink = patch_for(repo, {"app.py": APP.replace("[1, 2]", "[1]")})
+    fix = patch_for(repo, {"app.py": APP.replace(" if n != 2 else 5", "")})
+    before = _containers()
+
+    shrunk = run_eval(repo, commit, shrink, TARGET_PARAM, tmp_path, "shrink", backend="docker")
+    fixed = run_eval(repo, commit, fix, TARGET_PARAM, tmp_path, "fixed", backend="docker")
+
+    assert shrunk["environment"]["sandbox"]["backend"] == "docker"
+    assert shrunk["outcome"]["overall"] == "rejected"
+    assert shrunk["outcome"]["independently_verified"] is False
+    coverage = shrunk["target"]["checks"][0]["coverage"]
+    assert coverage["provenance"] == "base_commit_collection"
+    assert coverage["missing_required"] == [f"{T}::test_double[2]"]
+    assert fixed["outcome"]["overall"] == "accepted"
+    assert fixed["outcome"]["independently_verified"] is True
+    assert fixed["target"]["checks"][0]["coverage"]["executed"] == [
+        f"{T}::test_double[1]",
+        f"{T}::test_double[2]",
+    ]
+    assert _containers() == before

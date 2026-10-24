@@ -123,10 +123,13 @@ configuration, and evidence integrity.
   patch designed to forge results (for example by exiting with status 0 at
   import time, or by locating and rewriting a report file) can still mislead a
   command-exit-code check. Restoring evaluator files and rejecting tool shadowing
-  removes the common vectors; structured pytest checks in patch evaluation
-  additionally reconcile collected test IDs with a JUnit report: every
-  expected test, identified by its full node ID, must be reported exactly once
-  as passed.
+  removes the common vectors. Structured pytest checks in patch evaluation also
+  take their required test IDs from candidate-independent sources and reconcile
+  them with a total-checked JUnit report: every required test, identified by its
+  full node ID, must be reported exactly once as passed. A patch that deletes or
+  rewrites report entries is caught. What remains possible is code that
+  rewrites the report consistently *and* forces exit status 0 from inside the
+  test process.
   Treat acceptance as strong evidence, not proof.
 - Docker isolation depends on a privileged host Docker daemon. The local Compose
   worker mounts the Docker socket, which is equivalent to host root.

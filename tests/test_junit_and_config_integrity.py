@@ -17,18 +17,37 @@ import pytest
 
 from tender.integrity import EvaluatorConfigError, IntegrityPolicy, restore_evaluator_sections
 from tender.models import Issue
-from tender.patch_eval import evaluate_patch, junit_node_ids, reconcile_pytest_results
+from tender.patch_eval import evaluate_patch, junit_node_ids
+from tender.patch_eval import reconcile_pytest_results as reconcile_with_coverage
 from tender.workflow import AgentWorkflow
 
 F = "tests/test_classes.py"
 
 
 def xml(*cases: str) -> str:
-    return (
-        '<?xml version="1.0"?>\n<testsuites><testsuite name="pytest">'
-        + "".join(cases)
-        + ("</testsuite></testsuites>")
+    """A report with the totals pytest itself would declare for these cases."""
+    body = "".join(cases)
+    totals = (
+        f'tests="{body.count("<testcase")}" failures="{body.count("<failure")}" '
+        f'errors="{body.count("<error")}" skipped="{body.count("<skipped")}"'
     )
+    return (
+        f'<?xml version="1.0"?>\n<testsuites><testsuite name="pytest" {totals}>'
+        + body
+        + "</testsuite></testsuites>"
+    )
+
+
+def reconcile_pytest_results(selectors, collected, status, report):
+    """These tests trust the collected list itself as the required coverage."""
+    outcomes, problems, _ = reconcile_with_coverage(
+        selectors,
+        collected,
+        status,
+        report,
+        required_ids=list(dict.fromkeys(collected or [])),
+    )
+    return outcomes, problems
 
 
 def case(classname: str, name: str, file: str = F, body: str = "") -> str:

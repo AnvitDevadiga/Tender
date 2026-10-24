@@ -123,3 +123,27 @@ valid configuration fix rejected, while the report still claimed independent
 verification. **Fixed:** only the test-runner section is reset, the rest is
 tested as submitted, and isolation failures are integrity violations. Neither
 published demo patch touched these files, so their outcomes are unaffected.
+
+## 2026-10-24 (later) — required coverage was candidate-controlled at commit `1027b54`
+
+### E12. Expected test IDs were collected inside the patched workspace
+
+`pytest --collect-only` ran after the candidate patch was applied. Parametrized
+IDs depend on application values, so a candidate could shrink
+`CASES = [1, 2]` to `[1]` without fixing case 2. The run was then accepted and
+reported as independently verified. Reproduced locally and in Docker.
+**Fixed:** required coverage comes from evaluator-declared IDs, collection at
+the base commit, or conservative static enumeration of evaluator-owned tests.
+Candidate collection is only evidence, and candidate-authorized coverage is
+never reported as independently verified.
+
+### E13. JUnit totals and duplicate collected IDs were not checked
+
+A report that declared two tests and one failure but contained one passing case
+was accepted, and duplicate collected IDs were silently de-duplicated.
+**Fixed:** suite totals must match the records present, and duplicate collected
+or required IDs reject the check.
+
+The published demo reports use file and function selectors whose required
+coverage is collectable at the base commit. Re-running them under these rules
+gives the same outcomes (verified 2026-10-24, Docker).
