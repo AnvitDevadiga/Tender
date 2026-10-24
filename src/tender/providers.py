@@ -131,7 +131,7 @@ class ChatCompletionsProvider:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "Tender/0.1 (+https://github.com/AnvitDevadiga/tender)",
+                "User-Agent": "Tender/0.2 (+https://github.com/AnvitDevadiga/Tender)",
             },
         )
         try:

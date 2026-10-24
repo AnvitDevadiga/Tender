@@ -48,7 +48,7 @@ class GitHubIssueClient:
         return await asyncio.to_thread(self._fetch_sync, canonical_url, owner, repo, number)
 
     def _fetch_sync(self, url: str, owner: str, repo: str, number: int) -> Issue:
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "Tender/0.1"}
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "Tender/0.2"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         req = request.Request(

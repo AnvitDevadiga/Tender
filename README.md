@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/tender-wordmark-transparent.png" width="360" alt="tender.">
   <p><strong>Give coding agents a task. Keep the proof.</strong></p>
-  <p><a href="https://anvitdevadiga.github.io/tender/">Live demo</a> · <a href="https://github.com/AnvitDevadiga/tender">Source</a></p>
+  <p><a href="https://anvitdevadiga.github.io/Tender/">Live demo</a> · <a href="https://github.com/AnvitDevadiga/Tender">Source</a></p>
 </div>
 
 Tender is a local-first platform for evaluating coding agents. It gives an agent a repository task, runs its proposed changes in a controlled workspace, checks the result, and records what happened.
@@ -49,7 +49,7 @@ Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). The das
 
 ## Live demo and current evidence
 
-The [public demo](https://anvitdevadiga.github.io/tender/) replays a recorded run and a [console replay](https://anvitdevadiga.github.io/tender/replay/) over the published experiment records. Neither accepts tasks or executes submitted code. The paired retrieval-cap experiment planned 60 trials across 30 tasks and five pinned repositories, but provider quota and tool-call errors left only five clean task pairs. Those pairs showed no solve-rate gain from the smaller context cap, so they do not support an efficiency claim. Read the [experiment report](docs/experiments/retrieval-cap-ab-v1.md), [raw results](docs/experiments/retrieval-cap-ab-v1.json), and earlier [provider trial notes](docs/PROVIDER_TRIALS.md). Token-cost figures are published-rate estimates, not billing records.
+The [public demo](https://anvitdevadiga.github.io/Tender/) replays a recorded run and a [console replay](https://anvitdevadiga.github.io/Tender/replay/) over the published experiment records. Neither accepts tasks or executes submitted code. The paired retrieval-cap experiment planned 60 trials across 30 tasks and five pinned repositories, but provider quota and tool-call errors left only five clean task pairs. Those pairs showed no solve-rate gain from the smaller context cap, so they do not support an efficiency claim. Read the [experiment report](docs/experiments/retrieval-cap-ab-v1.md), [raw results](docs/experiments/retrieval-cap-ab-v1.json), and earlier [provider trial notes](docs/PROVIDER_TRIALS.md). Token-cost figures are published-rate estimates, not billing records.
 
 ## Project map
 
