@@ -1,5 +1,22 @@
 # Implementation Plan
 
+## Status — 2026-10-24 (0.2.0)
+
+The evaluator-correctness, reliability, interface, and local patch-verification
+work is implemented; see [Current state](CURRENT_STATE.md). Open items, in order:
+
+1. Signed evidence bundles (an evaluator-held key) and an attestation of the
+   sandbox image digest.
+2. Out-of-process test result collection, so the code under test cannot forge
+   results from inside the test process.
+3. A reviewed path for remote sources and GitHub pull requests, fetched as
+   data and verified in Docker only, with no automated writes.
+4. A larger, more varied, quota-aware live benchmark under an explicit budget.
+5. Durable workflow resume and multi-user authentication, only if Tender ever
+   becomes a shared service.
+
+The historical plan below is kept for context.
+
 This plan preserves the existing Python evaluation loop and upgrades it in reviewable slices. Each slice should land with deterministic tests and truthful documentation. The full product brief is not implemented by the current baseline.
 
 ## Progress snapshot — 2026-10-10

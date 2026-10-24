@@ -1,0 +1,59 @@
+{
+  "checks": [
+    {
+      "command": "tests/test_core.py",
+      "coverage": {
+        "collected": [
+          "tests/test_core.py::test_mean",
+          "tests/test_core.py::test_mean_rejects_empty_input",
+          "tests/test_core.py::test_median_odd_length",
+          "tests/test_core.py::test_median_rejects_empty_input",
+          "tests/test_core.py::test_median_does_not_mutate_input"
+        ],
+        "duplicate_collected": [],
+        "executed": [
+          "tests/test_core.py::test_mean",
+          "tests/test_core.py::test_mean_rejects_empty_input",
+          "tests/test_core.py::test_median_does_not_mutate_input",
+          "tests/test_core.py::test_median_odd_length",
+          "tests/test_core.py::test_median_rejects_empty_input"
+        ],
+        "expected": [
+          "tests/test_core.py::test_mean",
+          "tests/test_core.py::test_mean_rejects_empty_input",
+          "tests/test_core.py::test_median_does_not_mutate_input",
+          "tests/test_core.py::test_median_odd_length",
+          "tests/test_core.py::test_median_rejects_empty_input"
+        ],
+        "extra_candidate_cases": [],
+        "missing_required": [],
+        "not_collected_by_candidate": [],
+        "provenance": "base_commit_collection"
+      },
+      "duration_ms": 398,
+      "executed": "python3 -m pytest -p no:cacheprovider -o addopts= --collect-only -q 'tests/test_core.py' > .tender-collect-c021fd93fb7b.txt 2>&1; collect_status=$?; python3 -m pytest -p no:cacheprovider -o addopts= -q -o junit_family=xunit1 --junitxml=.tender-junit-c021fd93fb7b.xml 'tests/test_core.py'; status=$?; echo '----TENDER-COLLECTED-TESTS----'; echo \"$collect_status\"; cat .tender-collect-c021fd93fb7b.txt 2>/dev/null; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-c021fd93fb7b.xml 2>/dev/null; exit $status",
+      "name": "existing statistics behaviour",
+      "passed": true,
+      "return_code": 0,
+      "stderr": "",
+      "stdout": ".....                                                                    [100%]\n-------- generated xml file: /workspace/.tender-junit-c021fd93fb7b.xml ---------\n5 passed in 0.01s\n",
+      "tests": [
+        {
+          "cases": "5",
+          "id": "tests/test_core.py",
+          "outcome": "passed"
+        }
+      ],
+      "timed_out": false
+    }
+  ],
+  "duration_ms": 572,
+  "evaluator_sections": [],
+  "kind": "regression",
+  "pristine": true,
+  "removed_patch_additions": [],
+  "restored_from_base": [],
+  "status": "passed",
+  "tested_as_submitted": true,
+  "timed_out": false
+}

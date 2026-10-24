@@ -1,0 +1,55 @@
+{
+  "checks": [
+    {
+      "detail": "452 bytes (limit 1048576)",
+      "name": "size limit",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "name": "UTF-8 text",
+      "passed": true
+    },
+    {
+      "detail": "1 files",
+      "name": "unified diff syntax",
+      "passed": true
+    },
+    {
+      "detail": "1 (limit 100)",
+      "name": "file count",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "name": "paths stay inside the repository",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "name": "no symbolic links",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "name": "no submodule changes",
+      "passed": true
+    },
+    {
+      "detail": "no binary changes",
+      "name": "binary policy",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "name": "no protected or evaluator-owned paths",
+      "passed": true
+    },
+    {
+      "detail": "",
+      "name": "applies cleanly to the base commit",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

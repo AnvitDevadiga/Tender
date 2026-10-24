@@ -1,0 +1,10 @@
+{
+  "base_commit": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+  "head_commit": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+  "name": "stats-demo",
+  "note": "Uncommitted and ignored files are never used; workspaces are built from Git objects at base_commit.",
+  "requested_base": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+  "source_unchanged": true,
+  "working_tree_dirty": false,
+  "working_tree_entries": 0
+}

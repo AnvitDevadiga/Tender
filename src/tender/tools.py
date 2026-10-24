@@ -60,6 +60,43 @@ class ToolExecution:
     audit_input: dict[str, object]
     changed_files: tuple[str, ...] = ()
     duration_ms: int = 0
+    #: True when authorization refused the call before any tool code ran.
+    rejected: bool = False
+
+
+ALL_TOOL_NAMES = frozenset(
+    {
+        "read_file",
+        "write_file",
+        "replace_text",
+        "list_directory",
+        "search_code",
+        "run_command",
+        "run_tests",
+        "git_diff",
+        "git_status",
+        "git_log",
+        "dependency_lookup",
+        "lint",
+    }
+)
+#: Tools that need an explicit allowlist entry; they are never granted implicitly.
+EXPLICIT_ONLY_TOOLS = frozenset({"run_command"})
+#: Granted when a provider declares no allowlist: everything except arbitrary commands.
+DEFAULT_AGENT_TOOLS = ALL_TOOL_NAMES - EXPLICIT_ONLY_TOOLS
+
+
+def resolve_tool_allowlist(declared: object) -> frozenset[str]:
+    """Authorization is evaluator configuration: never derived from model output.
+
+    ``None`` grants the default set (which excludes ``run_command``). An explicit
+    collection is intersected with the known tools, so a typo cannot widen access.
+    """
+    if declared is None:
+        return DEFAULT_AGENT_TOOLS
+    if isinstance(declared, str) or not isinstance(declared, (set, frozenset, list, tuple)):
+        raise ValueError("tool allowlist must be a collection of tool names")
+    return frozenset(str(name) for name in declared) & ALL_TOOL_NAMES
 
 
 class AgentToolbox:
@@ -149,8 +186,12 @@ class AgentToolbox:
         test_commands: list[str],
         setup_commands: list[str],
         static_analysis_commands: list[str],
+        allowed_tools: frozenset[str] | set[str] | None = None,
     ) -> None:
         self.root = Path(root).resolve(strict=True)
+        self.allowed_tools = resolve_tool_allowlist(
+            frozenset(allowed_tools) if allowed_tools is not None else None
+        )
         self.sandbox_backend = sandbox_backend
         self.timeout_seconds = timeout_seconds
         self.test_commands = test_commands
@@ -160,9 +201,14 @@ class AgentToolbox:
         self._retriever = TextRetriever()
 
     @classmethod
-    def definitions(cls) -> list[dict[str, object]]:
+    def definitions(
+        cls, allowed: frozenset[str] | set[str] | None = None
+    ) -> list[dict[str, object]]:
+        """Tool schemas; pass ``allowed`` to advertise only authorized tools."""
         definitions = []
         for name, description, argument_type in cls.tool_specs:
+            if allowed is not None and name not in allowed:
+                continue
             parameters = argument_type.model_json_schema()
             if name == "list_directory":
                 parameters["properties"]["path"]["default"] = "."
@@ -178,8 +224,27 @@ class AgentToolbox:
             )
         return definitions
 
+    @classmethod
+    def tool_names(cls) -> frozenset[str]:
+        return frozenset(name for name, _, _ in cls.tool_specs)
+
+    def advertised(self) -> list[dict[str, object]]:
+        return self.definitions(self.allowed_tools)
+
     def execute(self, name: str, arguments: str | dict[str, Any]) -> ToolExecution:
+        """Dispatch one call; authorization is checked before arguments are parsed."""
         started = perf_counter()
+        if not isinstance(name, str) or name not in self.allowed_tools:
+            safe_name = name[:128] if isinstance(name, str) else type(name).__name__
+            reason = "unknown tool" if safe_name not in ALL_TOOL_NAMES else "tool is not authorized"
+            return ToolExecution(
+                safe_name,
+                False,
+                json.dumps({"error": f"{reason}: {safe_name}"}),
+                {"arguments_bytes": len(arguments) if isinstance(arguments, str) else None},
+                duration_ms=round((perf_counter() - started) * 1000),
+                rejected=True,
+            )
         spec = next((item for item in self.tool_specs if item[0] == name), None)
         if spec is None:
             return self._error(name, {}, "unknown tool", started)

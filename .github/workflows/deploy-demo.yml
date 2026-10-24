@@ -5,8 +5,8 @@ on:
     branches: [main]
     paths:
       - demo/**
-      - dashboard/app.js
-      - dashboard/styles.css
+      - dashboard/**
+      - docs/experiments/**
       - scripts/build_demo_site.sh
       - .github/workflows/deploy-demo.yml
   workflow_dispatch:

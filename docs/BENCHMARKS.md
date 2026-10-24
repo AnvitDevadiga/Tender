@@ -6,7 +6,7 @@ Tender benchmarks are intended to be reproducible repository-level software task
 
 Task JSONL schema v2 requires a stable `task_id`, issue, local workspace, full 40-character `base_commit`, setup commands, agent test commands, independent verification commands, and a per-task timeout. An optional `static_analysis_commands` array adds lint or other static checks. The issue's optional base commit must match the task pin. The runner verifies the resolved checkout SHA before execution, bounds setup and agent execution by task/manifest budgets, and stops at the experiment-wide `max_minutes` budget. A budget-truncated output is marked `complete: false`.
 
-The `run-experiment` benchmark runner supports only the local sandbox for trusted, local fixture datasets. Do not use it to execute arbitrary public datasets. Setup commands execute in the run's disposable copy before its agent tests. The separate API workflow requires Docker mode; setup and test commands share one disposable container per attempt, which is removed after grading. Local image build and sandbox smoke checks have succeeded. A small repeated Groq experiment now exists: 18 completed trials over three unique synthetic tasks, two repetitions for retry budgets 0/1/2. See [provider trial record](PROVIDER_TRIALS.md) and the [raw experiment JSON](experiments/groq-retry-ablation-3tasks-v1.json). Treat it as exploratory only.
+The `run-experiment` runner supports the local sandbox for trusted fixture datasets and the Docker sandbox for anything else. Do not use it to execute arbitrary public datasets. Manifests that route to a billable provider (`groq/…`, `openai/…`) must set `max_provider_calls`, and the command must be given `--authorize-live-provider`. Manifests can also set `trial_order` (`sequential`, `randomized` with `seed`, or `counterbalanced`) and `max_consecutive_provider_failures` for quota-aware stopping. Tasks may add `regression_commands`; without them, records report regression as `not_configured`. Setup commands execute in the run's disposable copy before its agent tests. The separate API workflow requires Docker mode; setup and test commands share one disposable container per attempt, which is removed after grading. Local image build and sandbox smoke checks have succeeded. A small repeated Groq experiment now exists: 18 completed trials over three unique synthetic tasks, two repetitions for retry budgets 0/1/2. See [provider trial record](PROVIDER_TRIALS.md) and the [raw experiment JSON](experiments/groq-retry-ablation-3tasks-v1.json). Treat it as exploratory only.
 
 The agent records a concise provider-generated plan, then runs target tests, built-in diff checks, optional static-analysis commands, deterministic patch review, and verification on a separate clean copy. The experiment runner performs an additional task-owned verification pass and records its output. The fixture verification checks are separate assertions stored in the pinned dataset. `regression_free_rate` uses target-test-passing runs as its denominator; runs that fail before verification are not counted as regression observations.
 
@@ -34,3 +34,14 @@ Each run preserves the task ID and checked-out commit with configuration, comman
 ## Comparison limits
 
 Report task count, repetitions, resolved count, resolution rate, failure categories, cost observations, latency, iterations, retries, tool calls, tokens, patch size, and regression outcomes. Separate unknown costs from known costs. Small datasets should be labeled exploratory; do not imply statistically meaningful differences without adequate task coverage and uncertainty analysis.
+
+## Experiment records (schema 3)
+
+New result files snapshot the manifest text and record, per trial, the
+`trial_index`, separate `target_outcome` and `regression_outcome`,
+`independent_final_verification`, the full `outcome`, exclusions
+(`provider_failure`, `environment_failure`) with reasons, stage timings, and
+counters. They also record `stop_reason` and planned versus executed trials.
+Historical schema 2 files are unchanged; see the [errata](EVALUATION_ERRATA.md).
+The retriever label `bm25` in historical manifests refers to Tender's lexical
+retriever, which is not BM25. New manifests should say `lexical`.

@@ -22,6 +22,8 @@ class BenchmarkTask:
     verification_tests: tuple[str, ...]
     timeout_seconds: int
     static_analysis_commands: tuple[str, ...] = ()
+    #: Independent regression checks; absent in the v2 datasets (regression not configured).
+    regression_commands: tuple[str, ...] = ()
 
     @property
     def commands(self) -> tuple[str, ...]:
@@ -54,6 +56,9 @@ class BenchmarkTask:
                 static_analysis_commands = cls._commands(
                     data.get("static_analysis_commands", []), "static_analysis_commands"
                 )
+                regression_commands = cls._commands(
+                    data.get("regression_commands", []), "regression_commands"
+                )
                 if not task_id or not workspace:
                     raise ValueError("task_id and workspace are required")
                 if task_id in seen_task_ids:
@@ -79,6 +84,7 @@ class BenchmarkTask:
                         verification_tests,
                         timeout_seconds,
                         static_analysis_commands,
+                        regression_commands,
                     )
                 )
             except (KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
@@ -111,6 +117,13 @@ class ExperimentManifest:
     output_usd_per_million_tokens: float | None = None
     pricing_basis: str | None = None
     retrieval_limits: tuple[int, ...] = (12,)
+    #: sequential (legacy), randomized (seeded shuffle), or counterbalanced.
+    trial_order: str = "sequential"
+    seed: int = 0
+    #: Stop early after this many consecutive provider failures (quota/outage).
+    max_consecutive_provider_failures: int | None = None
+    #: Hard cap on provider calls across the whole experiment; required for live models.
+    max_provider_calls: int | None = None
 
     @classmethod
     def load(cls, path: str | Path) -> "ExperimentManifest":
@@ -142,6 +155,18 @@ class ExperimentManifest:
                 str(data["pricing_basis"]).strip() if data.get("pricing_basis") else None
             ),
             retrieval_limits=tuple(int(limit) for limit in data.get("retrieval_limits", [12])),
+            trial_order=str(data.get("trial_order", "sequential")),
+            seed=int(data.get("seed", 0)),
+            max_consecutive_provider_failures=(
+                int(data["max_consecutive_provider_failures"])
+                if data.get("max_consecutive_provider_failures") is not None
+                else None
+            ),
+            max_provider_calls=(
+                int(data["max_provider_calls"])
+                if data.get("max_provider_calls") is not None
+                else None
+            ),
         )
         if (
             not manifest.name.strip()
@@ -180,7 +205,20 @@ class ExperimentManifest:
             )
         if not 1 <= manifest.timeout_seconds <= 3600:
             raise ValueError("manifest timeout_seconds must be between 1 and 3600")
+        if manifest.trial_order not in {"sequential", "randomized", "counterbalanced"}:
+            raise ValueError(
+                "manifest trial_order must be sequential, randomized, or counterbalanced"
+            )
+        for field_name in ("max_consecutive_provider_failures", "max_provider_calls"):
+            value = getattr(manifest, field_name)
+            if value is not None and value < 1:
+                raise ValueError(f"manifest {field_name} must be positive")
         return manifest
+
+    @property
+    def uses_live_provider(self) -> bool:
+        """True for any model routed to a network provider (and therefore billable)."""
+        return self.model.partition("/")[0] in {"groq", "openai"}
 
 
 class ExperimentRunner:

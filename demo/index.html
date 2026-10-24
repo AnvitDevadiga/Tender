@@ -3,123 +3,269 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#080808">
-  <meta name="description" content="Tender evaluates coding agents through reproducible tasks, isolated runs, and inspectable evidence.">
-  <title>Tender — coding agents, measured</title>
+  <meta name="color-scheme" content="light dark">
+  <title>Tender — verify AI-generated code</title>
+  <meta name="description" content="Tender evaluates coding-agent patches against independent tests in fresh, pinned, isolated workspaces, and records hash-sealed evidence of what actually passed.">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <script src="dashboard/theme.js"></script>
+  <link rel="stylesheet" href="dashboard/styles.css">
   <link rel="stylesheet" href="styles.css">
+  <script type="module" src="demo.js"></script>
 </head>
 <body>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
-    <a class="wordmark" href="#top" aria-label="Tender home">tender<span>.</span></a>
-    <nav aria-label="Main navigation">
-      <a href="#method">Method</a>
-      <a href="#results">Results</a>
-      <a href="#run">Run record</a>
-      <a href="#console">Console</a>
-      <a class="nav-source" href="https://github.com/AnvitDevadiga/tender" target="_blank" rel="noreferrer">Source <span aria-hidden="true">↗</span></a>
-    </nav>
+    <div class="site-header-inner">
+      <a class="wordmark" href="#top" aria-label="Tender, back to top">tender<span>.</span></a>
+      <nav class="site-nav" id="site-nav" aria-label="Sections">
+        <a href="#workflow">Workflow</a>
+        <a href="#results">Results</a>
+        <a href="#models">Models</a>
+        <a href="#use">Use it</a>
+        <a href="#reproduce">Reproduce</a>
+        <a href="#limits">Limits</a>
+        <a href="replay/">Dashboard</a>
+      </nav>
+      <div class="header-actions">
+        <a class="btn ghost small hide-narrow" href="https://github.com/AnvitDevadiga/Tender" target="_blank" rel="noreferrer">GitHub</a>
+        <button class="btn ghost small" type="button" data-theme-toggle aria-pressed="false">Dark</button>
+        <button class="btn ghost small menu-toggle" type="button" aria-expanded="false" aria-controls="site-nav" data-menu-toggle>Menu</button>
+      </div>
+    </div>
   </header>
 
   <main id="main">
-    <section class="hero" id="top" aria-labelledby="hero-title">
-      <div class="hero-meta"><span>Independent evaluation for coding agents</span><span>Research prototype · 2026</span></div>
-      <div class="hero-content">
-        <h1 id="hero-title">Make the change.<br><span>Prove it works.</span></h1>
-        <div class="hero-aside">
-          <p>Tender gives coding agents a task, checks their work in isolation, and keeps the evidence.</p>
-          <a class="text-link light-link" href="#results">Explore the evaluation <span aria-hidden="true">↓</span></a>
+    <section class="hero section-wrap" id="top" aria-labelledby="hero-title">
+      <div class="hero-copy">
+        <h1 id="hero-title">Verify AI-generated code.</h1>
+        <p class="lede">Tender evaluates coding-agent patches against independent tests, records execution evidence, and helps developers understand what actually passed.</p>
+        <p class="hero-detail">Each check runs in a fresh workspace built from a pinned commit. The required tests are fixed by the evaluator, not by the patch. Commands run in a network-disabled container, and the results are sealed with a SHA-256 manifest.</p>
+        <div class="hero-actions">
+          <a class="btn primary" href="replay/#/reports">Explore demo</a>
+          <a class="btn" href="https://github.com/AnvitDevadiga/Tender" target="_blank" rel="noreferrer">View GitHub</a>
+        </div>
+        <p class="fineprint">This site is static and read-only: it shows recorded runs and reports, and nothing executes here. A pass means the configured checks passed. It does not prove the code is free of defects.</p>
+      </div>
+      <figure class="report-preview" id="report-preview" aria-label="Recorded patch verification report">
+        <figcaption>Loading a recorded report…</figcaption>
+      </figure>
+    </section>
+
+    <section class="band section-wrap" id="what" aria-labelledby="what-title">
+      <h2 id="what-title">What Tender does</h2>
+      <div class="three-up">
+        <div>
+          <h3>Verifies a patch</h3>
+          <p>Give it a local repository, a commit, a patch from any agent or person, and acceptance criteria. It returns accepted, rejected, error, or inconclusive, with the reasons.</p>
+        </div>
+        <div>
+          <h3>Evaluates an agent</h3>
+          <p>Runs a bounded agent loop on pinned tasks, with tools authorized at dispatch, and verifies every candidate in a workspace the agent never touched.</p>
+        </div>
+        <div>
+          <h3>Keeps the evidence</h3>
+          <p>Records commands, exit codes, output, test IDs, timings, and digests. Values it never captured are shown as unknown, not as zero.</p>
         </div>
       </div>
-      <div class="hero-bottom"><span>Reproducible tasks</span><span>Isolated execution</span><span>Inspectable results</span></div>
     </section>
 
-    <section class="intro section-wrap" id="method" aria-labelledby="method-title">
-      <div class="section-kicker"><span>01 / Method</span><span>The system</span></div>
-      <div class="intro-grid">
-        <h2 id="method-title">A result should<br>come with proof.</h2>
-        <div class="intro-copy">
-          <p class="lead">An agent’s answer is only the beginning. Tender pins the task to a specific code version, runs the change, and checks the exact patch against independent tests.</p>
-          <p>Every run leaves a record: what the agent changed, which checks passed, how long it took, and how many tokens it used. When cost is unavailable from the provider, it stays unknown.</p>
+    <section class="band section-wrap" id="workflow" aria-labelledby="workflow-title">
+      <h2 id="workflow-title">How independent verification works</h2>
+      <p class="section-lede">Five steps, no hidden ones. The patch and the agent are untrusted, and so is the repository's own Git configuration.</p>
+      <figure class="diagram">
+        <svg class="flow-h" viewBox="0 0 1040 120" role="img" aria-labelledby="flow-title flow-desc">
+          <title id="flow-title">Verification workflow</title>
+          <desc id="flow-desc">Task or patch, then pinned repository, then isolated execution, then independent verification, then evidence report.</desc>
+          <defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" class="arrowhead"></path>
+            </marker>
+          </defs>
+          <g class="nodes">
+            <rect x="1" y="30" width="168" height="60" rx="4"></rect>
+            <rect x="218" y="30" width="168" height="60" rx="4"></rect>
+            <rect x="435" y="30" width="168" height="60" rx="4"></rect>
+            <rect x="652" y="30" width="168" height="60" rx="4"></rect>
+            <rect x="869" y="30" width="168" height="60" rx="4" class="emphasis"></rect>
+          </g>
+          <g class="edges">
+            <line x1="169" y1="60" x2="214" y2="60" marker-end="url(#arrow)"></line>
+            <line x1="386" y1="60" x2="431" y2="60" marker-end="url(#arrow)"></line>
+            <line x1="603" y1="60" x2="648" y2="60" marker-end="url(#arrow)"></line>
+            <line x1="820" y1="60" x2="865" y2="60" marker-end="url(#arrow)"></line>
+          </g>
+          <g class="labels">
+            <text x="85" y="65">Task or patch</text>
+            <text x="302" y="65">Pinned repository</text>
+            <text x="519" y="65">Isolated execution</text>
+            <text x="736" y="65">Independent checks</text>
+            <text x="953" y="65">Evidence report</text>
+          </g>
+        </svg>
+        <svg class="flow-v" viewBox="0 0 300 470" role="img" aria-labelledby="flow-title-v">
+          <title id="flow-title-v">Verification workflow: task or patch, pinned repository, isolated execution, independent checks, evidence report.</title>
+          <defs>
+            <marker id="arrow-v" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto">
+              <path d="M0 0 L10 5 L0 10 z" class="arrowhead"></path>
+            </marker>
+          </defs>
+          <g class="nodes">
+            <rect x="40" y="1" width="220" height="56" rx="4"></rect>
+            <rect x="40" y="103" width="220" height="56" rx="4"></rect>
+            <rect x="40" y="205" width="220" height="56" rx="4"></rect>
+            <rect x="40" y="307" width="220" height="56" rx="4"></rect>
+            <rect x="40" y="409" width="220" height="56" rx="4" class="emphasis"></rect>
+          </g>
+          <g class="edges">
+            <line x1="150" y1="57" x2="150" y2="99" marker-end="url(#arrow-v)"></line>
+            <line x1="150" y1="159" x2="150" y2="201" marker-end="url(#arrow-v)"></line>
+            <line x1="150" y1="261" x2="150" y2="303" marker-end="url(#arrow-v)"></line>
+            <line x1="150" y1="363" x2="150" y2="405" marker-end="url(#arrow-v)"></line>
+          </g>
+          <g class="labels">
+            <text x="150" y="34">Task or patch</text>
+            <text x="150" y="136">Pinned repository</text>
+            <text x="150" y="238">Isolated execution</text>
+            <text x="150" y="340">Independent checks</text>
+            <text x="150" y="442">Evidence report</text>
+          </g>
+        </svg>
+      </figure>
+      <ol class="steps">
+        <li><strong>Task or patch.</strong> An agent's output, or a <code>.patch</code> file from any tool. The acceptance criteria are written before it runs.</li>
+        <li><strong>Pinned repository.</strong> The commit is resolved from a sanitized copy of <code>.git</code>; repository hooks and helpers never run on your machine. The source is only read.</li>
+        <li><strong>Isolated execution.</strong> The patch is applied to a fresh workspace built from Git objects. Test files and test-runner settings are reset, and hidden tests are added.</li>
+        <li><strong>Independent checks.</strong> A baseline, then target and regression tests, in Docker. Required test IDs come from the base commit, so a patch cannot remove them.</li>
+        <li><strong>Evidence report.</strong> Commands, exit codes, per-test results, coverage provenance, and file hashes, with what remains unknown.</li>
+      </ol>
+    </section>
+
+    <section class="band section-wrap" id="results" aria-labelledby="results-title">
+      <h2 id="results-title">Evidence and results</h2>
+      <p class="section-lede">Every number below is read from committed records when this page loads. Each figure names its source file. The datasets are reported separately because they were collected under different conditions.</p>
+
+      <h3 class="subhead" id="repair-title">One bug, two patches</h3>
+      <p class="subtext">A deterministic demonstration with no model: the first patch looks right and is rejected; the second is accepted. Both reports were produced by running <code>scripts/run_patch_demo.py</code> in Docker.</p>
+      <div class="demo" id="patch-demo" aria-labelledby="repair-title"><p class="fineprint">Loading recorded reports…</p></div>
+
+      <div class="chart-block" id="chart-outcomes"></div>
+      <div class="chart-grid">
+        <div class="chart-block" id="chart-durations"></div>
+        <div class="chart-block" id="chart-paired"></div>
+      </div>
+      <div class="chart-block" id="chart-timeline"></div>
+    </section>
+
+    <section class="band section-wrap" id="models" aria-labelledby="models-title">
+      <h2 id="models-title">Models evaluated</h2>
+      <p class="section-lede" id="models-note">Loading…</p>
+      <div class="table-wrap" id="models-table"></div>
+      <p class="fineprint">Model and provider are listed separately: <code>openai/gpt-oss-20b</code> is an open-weight model published by OpenAI and served here through Groq's API. The table gains a row per configuration as experiments are recorded; none are implied.</p>
+    </section>
+
+    <section class="band section-wrap" id="use" aria-labelledby="use-title">
+      <h2 id="use-title">Use it on your own code</h2>
+      <p class="section-lede">Python 3.12+, Git, and Docker. No model API key is needed to verify a patch.</p>
+      <div class="code-grid">
+        <figure>
+          <figcaption>1. Install and build the sandbox image</figcaption>
+          <pre><code>git clone https://github.com/AnvitDevadiga/Tender.git &amp;&amp; cd Tender
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -e '.[dev]'
+docker build -f Dockerfile.sandbox -t tender-sandbox:local .</code></pre>
+        </figure>
+        <figure>
+          <figcaption>2. Write criteria before looking at the patch</figcaption>
+          <pre><code>schema_version = 1
+[task]
+title = "median() is wrong for even-length input"
+
+[[target]]
+name = "even-length median"
+pytest = ["tests/test_median.py"]
+
+[[regression]]
+name = "existing behaviour"
+pytest = ["tests/test_core.py"]</code></pre>
+        </figure>
+        <figure>
+          <figcaption>3. Verify a patch exported from any agent</figcaption>
+          <pre><code>export TENDER_SANDBOX_IMAGE=tender-sandbox:local
+tender verify-patch --repo ~/code/project --base HEAD \
+  --patch fix.patch --criteria criteria.toml --out reports/fix-1
+# exit status: 0 accepted, 1 rejected, 2 not evaluated</code></pre>
+        </figure>
+        <figure>
+          <figcaption>4. Inspect, share, and check the evidence</figcaption>
+          <pre><code>tender report render reports/fix-1/report.json   # Markdown
+tender evidence verify reports/fix-1/evidence    # recompute hashes
+TENDER_REPORT_ROOT=reports uvicorn tender.api:app
+# then open http://127.0.0.1:8000/dashboard/</code></pre>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band section-wrap" id="architecture" aria-labelledby="architecture-title">
+      <h2 id="architecture-title">Where things run</h2>
+      <div class="three-up">
+        <div>
+          <h3>Your machine</h3>
+          <p>The Tender process: Git plumbing on sanitized metadata copies, patch validation, report and evidence writing, and a local API and dashboard over SQLite. It never runs repository code.</p>
+        </div>
+        <div>
+          <h3>Docker</h3>
+          <p>Setup, collection, baseline, target, and regression commands. Network disabled, all capabilities dropped, read-only root, non-root user, and CPU, memory, process, and time limits.</p>
+        </div>
+        <div>
+          <h3>This website</h3>
+          <p>Nothing executes. GitHub Pages serves recorded JSON, the dashboard bundle, and a static replay of recorded runs and reports.</p>
         </div>
       </div>
-      <div class="method-list">
-        <article><span class="method-index">01</span><div><h3>Pin the task</h3><p>Start from a known repository version with explicit tests.</p></div></article>
-        <article><span class="method-index">02</span><div><h3>Run in isolation</h3><p>Give the agent a disposable copy and bounded tools.</p></div></article>
-        <article><span class="method-index">03</span><div><h3>Verify the patch</h3><p>Test the result and check it again on a clean copy.</p></div></article>
-      </div>
+      <p class="fineprint">Components and data flow: <a href="https://github.com/AnvitDevadiga/Tender/blob/main/docs/ARCHITECTURE.md">docs/ARCHITECTURE.md</a> · Outcome rules: <a href="https://github.com/AnvitDevadiga/Tender/blob/main/docs/evaluation-contract.md">evaluation contract</a></p>
     </section>
 
-    <section class="results" id="results" aria-labelledby="results-title">
-      <div class="section-wrap">
-        <div class="section-kicker"><span>02 / First evaluation</span><span>Groq · GPT-OSS 20B</span></div>
-        <div class="results-heading"><h2 id="results-title">Small sample.<br>Visible evidence.</h2><p>Three pinned fixture tasks, each repeated twice at three retry settings. The run checks that Tender can measure consistently; it is too small to predict performance on real-world repositories.</p></div>
-        <div class="result-table" role="table" aria-label="Evaluation results">
-          <div class="result-row result-head" role="row"><span role="columnheader">Measure</span><span role="columnheader">Recorded result</span><span role="columnheader">Context</span></div>
-          <div class="result-row" role="row"><span role="cell">Completed tasks</span><strong role="cell">18 / 18</strong><span role="cell">3 unique tasks · 2 repeats per setting</span></div>
-          <div class="result-row" role="row"><span role="cell">Regression checks</span><strong role="cell">18 / 18</strong><span role="cell">Independent verification passed</span></div>
-          <div class="result-row" role="row"><span role="cell">Average run time</span><strong role="cell">52.62 sec</strong><span role="cell">End-to-end workflow latency</span></div>
-          <div class="result-row" role="row"><span role="cell">Tokens used</span><strong role="cell">154,776</strong><span role="cell">139,576 input · 15,200 output</span></div>
-          <div class="result-row" role="row"><span role="cell">Estimated model cost</span><strong role="cell">$0.01503</strong><span role="cell">Published-rate estimate; actual bill unknown</span></div>
-        </div>
-        <p class="results-note">All trials passed on the first attempt, so retries were not needed. The three tasks are small examples from one fixture repository; repeated runs do not make them independent tasks. Cost uses <a href="https://console.groq.com/docs/model/openai/gpt-oss-20b" target="_blank" rel="noreferrer">Groq’s published rates</a>, not an account billing record.</p>
-        <a class="text-link" href="docs/experiments/groq-retry-ablation-3tasks-v1.json">Read all 18 run records <span aria-hidden="true">↗</span></a>
-      </div>
-    </section>
-
-    <section class="run-section section-wrap" id="run" aria-labelledby="run-title">
-      <div class="section-kicker"><span>03 / Recorded run</span><span>Run 2a5ce4e0</span></div>
-      <div class="run-heading"><h2 id="run-title">One patch,<br>checked twice.</h2><p>Step through a real local run. Tender asked an agent to fix a percentage calculation, ran the targeted test, then verified the exact patch on a clean copy.</p></div>
-      <div class="trace-metrics" id="trace-metrics" aria-label="Recorded run measurements"></div>
-      <div class="trace-controls">
-        <button id="play-trace" type="button">Play run <span aria-hidden="true">▶</span></button>
-        <button id="stop-trace" type="button" class="quiet-button">Stop</button>
-        <button id="show-patch" type="button" class="quiet-button">View patch</button>
-      </div>
-      <div class="trace-layout">
-        <nav id="trace-list" class="trace-list" aria-label="Run timeline"></nav>
-        <article id="trace-detail" class="trace-detail" aria-live="polite"><p>Loading recorded run…</p></article>
-      </div>
-      <p class="trace-note" id="trace-caveat"></p>
-    </section>
-
-    <section class="console-section section-wrap" id="console" aria-labelledby="console-title">
-      <div class="section-kicker"><span>04 / Local console</span><span>Recorded replay</span></div>
-      <div class="console-heading">
-        <h2 id="console-title">Every stored run,<br>still inspectable.</h2>
-        <p>The console is a local command center over the same records: filters and keyboard navigation, event timelines, unified patch diffs, artifact inventories, side-by-side comparison, and JSON/CSV export. The screenshots below come from the recorded replay — 19 runs from the published experiment above plus one follow-up verification.</p>
-      </div>
-      <div class="console-grid">
-        <figure class="console-shot console-shot-wide">
-          <img src="assets/dashboard-overview.jpg" alt="Tender console in light mode: status filters, search, and recorded latency, tokens, and cost for each run." width="1200" height="750" loading="lazy" />
-          <figcaption>Run list, filters, and recorded measurements.</figcaption>
-        </figure>
-        <figure class="console-shot">
-          <img src="assets/dashboard-drawer.jpg" alt="Run inspector in dark mode showing a unified diff of the recorded patch." width="1200" height="750" loading="lazy" />
-          <figcaption>The inspector: patch diffs, timelines, artifacts.</figcaption>
-        </figure>
-        <figure class="console-shot console-shot-tall">
-          <img src="assets/dashboard-mobile.jpg" alt="The console on a phone viewport: status chips, filters, and run cards." width="780" height="1688" loading="lazy" />
-          <figcaption>Responsive down to a phone viewport.</figcaption>
+    <section class="band section-wrap" id="reproduce" aria-labelledby="reproduce-title">
+      <h2 id="reproduce-title">Reproduce every number</h2>
+      <div class="code-grid single">
+        <figure>
+          <figcaption>From a fresh clone</figcaption>
+          <pre><code>python scripts/prepare_fixtures.py         # fixture commits have fixed authors and dates
+pytest -q                                  # offline suite; Docker tests run when a daemon exists
+python scripts/run_patch_demo.py           # regenerate the failure-and-repair reports
+python scripts/build_site_data.py --check  # this page's figures, from committed records
+python scripts/record_replay.py --check    # the replay rebuilds byte for byte</code></pre>
         </figure>
       </div>
-      <div class="console-actions">
-        <a class="text-link" href="replay/">Open the recorded replay <span aria-hidden="true">↗</span></a>
-        <p class="console-note">The replay serves the real console bundle from a static snapshot of the API responses. Mutating actions answer with an explicit refusal; nothing is re-run on the page. Regenerate it with <code>python scripts/record_replay.py</code>.</p>
-      </div>
+      <dl class="legend">
+        <div><dt><span class="label recorded">Recorded</span></dt><dd>Written by Tender while the run executed.</dd></div>
+        <div><dt><span class="label derived">Derived</span></dt><dd>Computed from recorded values, such as counts and medians.</dd></div>
+        <div><dt><span class="label unknown">Unknown</span></dt><dd>Never captured. Shown as unknown, never as zero.</dd></div>
+        <div><dt><span class="label verified">Verified</span></dt><dd>Re-checked in a fresh workspace at the pinned commit.</dd></div>
+      </dl>
+      <p class="fineprint">Defects found in earlier versions, and how they affect older records, are listed with dates in the <a href="https://github.com/AnvitDevadiga/Tender/blob/main/docs/EVALUATION_ERRATA.md">evaluation errata</a>. Historical experiment files are unchanged.</p>
     </section>
 
-    <section class="next-step" aria-labelledby="next-title">
-      <div class="section-wrap next-inner">
-        <span class="section-kicker">05 / Next</span>
-        <h2 id="next-title">More tasks.<br>Stronger conclusions.</h2>
-        <div><p>The next step is a larger, more varied task set. Broader claims can wait until the evidence supports them.</p><a class="text-link light-link" href="https://github.com/AnvitDevadiga/tender" target="_blank" rel="noreferrer">Explore the source <span aria-hidden="true">↗</span></a></div>
-      </div>
+    <section class="band section-wrap" id="limits" aria-labelledby="limits-title">
+      <h2 id="limits-title">Limits of the evidence</h2>
+      <ul class="limits">
+        <li><strong>Checks, not proof.</strong> Acceptance means the configured target and regression checks passed. A finite test suite cannot rule out every regression.</li>
+        <li><strong>Same process as the tests.</strong> Code under test runs inside pytest. Tender resets evaluator files, fixes required test IDs in advance, and checks report totals. Code built to rewrite the report and force a clean exit could still mislead a check.</li>
+        <li><strong>Docker is the boundary.</strong> It relies on the host Docker daemon. The local backend has no isolation and requires an explicit trust flag.</li>
+        <li><strong>Small experiments.</strong> One model, three synthetic tasks, and one A/B run dominated by provider quota errors. They exercise the measurement pipeline; they do not rank models.</li>
+        <li><strong>Hashed, not signed.</strong> Evidence bundles detect modified or missing files but do not prove who produced them.</li>
+        <li><strong>Local sources only.</strong> Remote repositories and pull-request execution are disabled.</li>
+      </ul>
     </section>
   </main>
 
-  <footer class="site-footer"><a class="wordmark" href="#top">tender<span>.</span></a><span>Built by Anvit</span><span>Evaluation-first coding agents</span></footer>
-  <script src="demo.js" defer></script>
+  <footer class="site-footer">
+    <div class="site-footer-inner">
+      <span class="wordmark">tender<span>.</span></span>
+      <span>Independent verification for AI-generated code. Research prototype built by Anvit.</span>
+      <span class="grow"></span>
+      <a href="replay/">Dashboard replay</a>
+      <a href="https://github.com/AnvitDevadiga/Tender" target="_blank" rel="noreferrer">GitHub</a>
+    </div>
+  </footer>
 </body>
 </html>

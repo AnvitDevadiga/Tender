@@ -1,26 +1,35 @@
 # Evaluation
 
-## Meaning of success
+The authoritative rules are in the [evaluation contract](evaluation-contract.md);
+historical interpretation notes are in the [errata](EVALUATION_ERRATA.md).
 
-A run passes only when target tests, built-in diff checks, configured static-analysis commands, deterministic patch review, and exact-patch verification on a second clean copy succeed; protected evaluator files must remain intact. A provider response or generated patch is not success. The benchmark runner performs an additional task-owned verification pass and records its output. A verifier failure changes the benchmark outcome to failed even when the agent tests passed.
+## Meaning of success (new runs)
 
-## Available measurements
+`outcome.overall = accepted` requires that the target checks passed in a fresh
+workspace at the validated base commit, that integrity passed, and that
+regression checks either passed or were explicitly not configured. The
+agent-side gates (agent tests, static analysis, diff review) give the agent
+feedback; they are not independent evidence. Legacy `status` stays for
+compatibility.
 
-Stored runs can provide pass/fail status, attempts, latency, input/output tokens, provider-reported cost when available, tool-call totals, failure category, command results, and patch artifacts. `/metrics` summarizes up to the most recent 1,000 stored runs. These values describe only recorded runs in that local store and must not be generalized beyond their sample.
+## Measurements
 
-Benchmark experiment output also includes task ID, checked-out commit, retry budget, repetition, run ID, result, duration, final patch size, token usage, cost, verification outcomes, and tool-call count, plus manifest and dataset hashes and the trial design (model, architecture, retrieval, repetition count, retry budgets, and limits). `regression_free_rate` is calculated over runs that passed agent tests and reached independent verification; failed or unverified runs are excluded from that denominator. Fewer than 30 unique tasks are explicitly marked exploratory. Manifest-wide budget exhaustion marks output incomplete and `status: partial`. Cost is `null` when unknown. A zero cost is valid only when the provider explicitly reports a zero amount.
+Runs record status and separate outcomes, attempts, stage durations, retry
+counters, tokens, provider-reported cost (unknown when not reported), tool calls,
+failure category, per-check command results, verifier fingerprints, the exact
+patch and its digest, and the event stream. `/metrics` aggregates **every**
+stored run with SQL and states its coverage. Provider failures are counted
+separately, with a pass rate that excludes them.
 
-The comparison command accepts only complete result files with matching dataset hashes, task cohorts, retry budgets, and repetition counts, and unique run IDs. It groups records by model, architecture, and retrieval configuration; it reports task-level outcomes and does not claim statistical significance. A benchmark-level verifier can fail after the agent workflow reaches its terminal state, so inspect the separate verification event and final run status.
+Experiment records (schema 3) add trial order, exclusions with reasons,
+target and regression outcomes, independent final verification, and the
+manifest text. Summaries report Wilson 95% intervals over included trials;
+comparisons report matched task-level wins and losses with an exact sign test.
+These numbers describe the recorded sample only.
 
-## Limitations
+## Legacy records
 
-- The comparison does not estimate uncertainty or establish statistical significance.
-- The experiment CLI is currently local-only for trusted fixture datasets. API workflow commands use Docker; Docker image builds, a sandbox smoke test, and one live worker execution have succeeded locally.
-- A passing configured command is only as strong as the benchmark's evaluator. Verification tests must be independent and protected from agent modification.
-- Local fixture runs are not evidence about performance on arbitrary GitHub repositories.
-- The latest repeated Groq fixture experiment completed 18/18 runs across three unique synthetic tasks, repeated twice at retry budgets 0/1/2. It is exploratory and strongly clustered; it does not establish general performance. See [provider trial record](PROVIDER_TRIALS.md).
-- The checked-in `results/fixture-retry-ablation.json` is a historical development run with zero passes and provider/tool failures. It is retained as an audit artifact, not a performance claim. The newer [three-task repeated trial](experiments/groq-retry-ablation-3tasks-v1.json) is likewise exploratory, not a general benchmark score.
-
-## Reporting rules
-
-Report the exact command, task count, dataset/manifest hashes, pinned commits, run IDs, raw artifacts, and known limitations. Include all failed runs and categorize them. Do not hard-code or hand-edit performance numbers. Keep unknown cost separate from zero and describe small-sample results as exploratory.
+Schema 2 experiment records and runs without `outcome` predate this contract.
+Their `regression_free` field means "the independent target check passed on a
+clean copy" (erratum E6), and their retrieval label `bm25` names Tender's
+lexical retriever (erratum E7).

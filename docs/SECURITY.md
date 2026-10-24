@@ -2,43 +2,164 @@
 
 ## Status
 
-This document describes the current prototype boundary and the requirements for safe deployment. Tender is not currently safe to expose as a public arbitrary-code execution service. Do not deploy it publicly with anonymous run creation enabled.
+Tender is a local, single-operator evaluation tool. It is **not** safe to expose
+as a public arbitrary-code execution service, and it is not a hostile-code
+sandbox you can point at untrusted repositories from the internet. Remote
+repository sources are disabled.
 
 ## Threat model
 
-Treat repository files, README content, source comments, issue text, generated patches, and terminal output as untrusted data. They may contain prompt injection, malicious build scripts, path tricks, resource-exhaustion payloads, or attempts to access secrets. Text from these sources must never override system/tool policy.
+Treat repository files (including `.git` metadata), README content, source
+comments, issue text, generated or imported patches, and terminal output as
+untrusted data. They may contain prompt injection, malicious build scripts, Git
+helper configuration, path tricks, resource-exhaustion payloads, or attempts to
+access secrets. Text from these sources never changes tool policy.
 
-Assets requiring protection include host files, provider credentials, GitHub tokens, database state, other users' repositories, benchmark evaluator tests, and deployment credentials. Threat actors include malicious repository contributors, issue authors, anonymous users, and compromised dependencies/build scripts.
+Assets to protect: host files and processes, provider credentials, GitHub
+tokens, the run database, other repositories, evaluator tests and verification
+configuration, and evidence integrity.
 
-## Current boundaries and gaps
+## Trust boundaries
 
-- API workflow execution is disabled unless `TENDER_WORKSPACE_ROOT` is set. A requested workspace must resolve beneath that root, and API workflows must select Docker. The service rejects symlinks and special files, enforces workspace file/size bounds, normalizes permissions, and applies patches only to a disposable copy. This reduces arbitrary host-path exposure but does not add authentication, authorization, or curated repository policy.
-- Local `Sandbox` is a timeout wrapper, not an isolation boundary.
-- Typed model tools enforce repository-root path checks, reject symlinks and common credential paths, hide evaluator/benchmark files, and cap file/output sizes. File edits target only the disposable workspace; shell commands use the selected sandbox. The local backend remains restricted to trusted fixtures.
-- Docker runner disables network, bounds CPU/memory/PIDs, drops capabilities, and uses a read-only root filesystem. It copies the read-only source mount into a disposable writable tmpfs and runs commands as UID 65532. Setup and test commands share one attempt container, destroyed after grading or timeout. Captured output is bounded. It still depends on a privileged host Docker daemon. Patch application and diff capture happen in the service process against its disposable run copy. Treat this as defense in depth for controlled experiments, not a complete hostile-code guarantee.
-- The Docker execution path has not been smoke-tested in this environment because the Docker daemon socket is unavailable. Unit tests verify timeout cleanup behavior with a controlled process stub.
-- Request bodies are capped before routing (`TENDER_MAX_REQUEST_BYTES`, default 1 MiB) and issue/config fields carry explicit length bounds, so oversized payloads are rejected with HTTP 413/422 instead of being parsed. The run-creation and cancellation routes accept an optional server-configured `TENDER_API_TOKEN`; when unset, the local-development API remains open. This is a shared-secret gate, not multi-user authentication. With no token configured, bind the API to loopback: a web page visited on the same host could otherwise submit cross-site form posts to run creation and cancellation. A disabled-by-default, single-process token-bucket limiter (`TENDER_RATE_LIMIT_PER_MINUTE`, `TENDER_RATE_LIMIT_BURST`) can throttle mutating routes per client host and answers 429 with `Retry-After`; it is not a substitute for multi-user authorization or distributed quotas. All responses carry `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, and a `Referrer-Policy`, and dashboard responses additionally carry a strict Content-Security-Policy (`default-src 'self'`, no inline scripts or styles). General authorization, curated task policy, and per-user resource quotas are not implemented. The optional final-approval endpoint requires its own server-configured bearer token of at least 32 characters, and GitHub issue import is a bounded read that is not behind either token.
-- Worker startup marks an interrupted run failed and records that it was not replayed; durable continuation is not implemented. Workers treat SIGINT/SIGTERM as a stop-claiming signal: the in-flight run finishes, then the process exits, and a second signal exits immediately so a stuck run can always be abandoned. Queued runs can be cancelled through an atomic status transition that worker claims skip; only queued (unclaimed) runs are cancellable, so a running sandbox is never killed mid-attempt by the API.
-- API run creation now writes a queued job and relative workspace identity to SQLite and returns without executing code. A separate worker atomically claims the oldest queued job, renews a database lease, and independently validates its workspace against `TENDER_WORKSPACE_ROOT`. Workers periodically fail expired jobs without replay, and owner/expiry checks fence stale database writes. The local Compose worker alone has access to the host Docker socket; this is a high-privilege local-development setup, not a public deployment pattern. Workflow checkpoint resume and safe retries remain unimplemented.
-- GitHub issue import accepts only canonical HTTPS issue URLs, constructs requests to the fixed GitHub API host, rejects redirects to other hosts, and caps the response at 1 MB. Repository clone handling still needs strict source allowlists/SSRF controls before remote exposure.
-- API and worker processes are split, but secret isolation is incomplete: provider credentials are read by the worker and the local Compose worker has host Docker socket access. A production worker must use a stronger isolation boundary and narrowly scoped credentials.
+| Zone | Trusted? | What runs there |
+| --- | --- | --- |
+| Tender process (API, worker, CLI) | Trusted code, untrusted inputs | Git plumbing against **sanitized metadata copies**, patch validation, evidence writing. Never repository code. |
+| Source repository you select | Untrusted, **read-only** | Nothing. Tender reads files and copies `.git` bytes; it never runs Git against the original metadata. |
+| Agent workspace (temporary) | Untrusted | Agent tool edits. Commands run only through the selected sandbox backend. |
+| Verifier workspaces (temporary, one per check) | Untrusted after patch application | Candidate patch + evaluator-owned files; checks run through the sandbox backend. |
+| Docker sandbox | Isolation boundary (defense in depth) | Setup, target, regression, and static-analysis commands. |
+| Local backend | **No isolation** | A timeout wrapper on the host. Use only for code you wrote or fully trust. |
 
-## Required controls before public deployment
+## Controls in this version
 
-1. Disable arbitrary host paths; map authorized repository IDs to server-managed workspaces beneath a strict root and reject symlink escapes.
-2. Run all untrusted checkout, patch, and build/test actions inside disposable isolated workers. Never mount host secrets or the Docker socket into the sandbox.
-3. Default to no network; if dependency setup requires network, use a restricted proxy/allowlist and record it. Apply CPU, memory, PID, disk, and wall-clock quotas.
-4. Pass a minimal environment allowlist. Keep model and GitHub credentials in the control plane; mediate GitHub actions after approval.
-5. Authenticate users; enforce repository permissions, rate limits, concurrency caps, and per-run quotas. Public demo mode must use curated tasks.
-6. Protect evaluator tests and benchmark metadata from agent writes; use an independent verifier.
-7. Validate GitHub URLs and clone sources, reject local/private network destinations where remote fetches occur, and handle redirects safely.
-8. Bound and redact logs; never return secrets in API errors or artifacts. Apply retention controls to patches and repository contents.
-9. Require human approval before pushes, PR creation, protected branch changes, or other external side effects.
+### Repository boundary (`src/tender/snapshot.py`)
+
+- A repository's local Git config can make Git execute helpers (`core.fsmonitor`,
+  filter drivers, `diff.external`, hooks, `include.path`). Tender never runs Git
+  against the source's own `.git`. It copies the metadata as plain bytes into a
+  private temporary directory (rejecting symlinks, special files, linked
+  worktrees, object alternates, and non-SHA-1 repositories), replaces the copied
+  config with a minimal Tender-written one, drops hooks, and runs every Git
+  command with global/system config disabled and helper settings overridden.
+- Working-tree status is computed by pointing the sanitized copy at the source
+  tree; any index refresh writes to the private copy.
+- Agent and verifier workspaces are materialized from Git objects at an exact
+  commit. Ignored files (for example `.env`) and uncommitted edits never reach a
+  workspace. Trees containing symlinks or submodules are rejected.
+- Earlier versions ran `git status`/`git rev-parse` directly on the source and
+  `git checkout` inside a raw filesystem copy, so a planted `core.fsmonitor`
+  helper or `post-checkout` hook could run on the host. See
+  [Evaluation errata](EVALUATION_ERRATA.md).
+
+### Commit identity
+
+- API/worker runs resolve the repository HEAD through the sanitized copy and
+  reject the run **before any provider call** when it disagrees with
+  `issue.base_commit`, when the source is dirty, or (with
+  `TENDER_REQUIRE_PINNED_COMMIT=1`) when no commit was requested. Requested and
+  executed commits are both recorded.
+
+### Pristine verification
+
+- Every verification check (target, then regression) runs in a brand-new
+  workspace materialized at the validated base commit; the cumulative candidate
+  patch is applied there and the directory is deleted afterwards. The workspace
+  fingerprint (HEAD, index digest, cleanliness) is recorded before the patch.
+
+### Evaluator integrity (`src/tender/integrity.py`)
+
+- `protected_paths` (default `.tender/**`), evaluator assets, `.git`
+  components, and modules that would shadow the test tooling (`pytest.py`,
+  `_pytest`, `sitecustomize.py`, `usercustomize.py`, `*.pth`, …) are integrity
+  violations: the candidate is rejected and never verified.
+- `restored_paths` (defaults: `tests/**`, `test/**`, `conftest.py`,
+  `**/conftest.py`, `pytest.ini`, `pytest.toml`, `.pytest.toml`, `noxfile.py`)
+  are pure evaluator files: they are reset to base-commit content in every
+  verifier, and files the patch added there are removed.
+- Mixed-purpose configuration files are not restored whole. Only their
+  test-runner section (`[tool.pytest*]` in `pyproject.toml`, `[tool:pytest]` in
+  `setup.cfg`, `[pytest]` in `tox.ini`) is reset; application and build
+  settings are tested exactly as submitted. The result is re-parsed and must
+  match the base section and the candidate's other values exactly. Otherwise, for
+  example with a non-standard form or a deleted file that held evaluator
+  settings, the run fails closed as an integrity violation and is not reported
+  as independently verified. Reports state whether the tested contents equal
+  the submitted patch (`tested_as_submitted`).
+- Hidden evaluator assets are read before any candidate runs, are never
+  visible in the agent workspace, are written into verifiers after the patch,
+  and are recorded by digest. Their output is withheld from agent feedback.
+- Verification commands, criteria, and result computation live in the Tender
+  process; exit codes are read by the host, not written by the candidate.
+
+### Tool authorization
+
+- The allowlist is enforced at dispatch, not only when advertising tools. Calls
+  to unknown or unauthorized tools are refused before argument parsing, recorded
+  as `agent_tool.rejected` events, and three refusals end the attempt as a
+  `policy_rejection`. `run_command` is never granted implicitly.
+
+### Network
+
+- Credentialed HTTP (GitHub, model providers) uses an opener that refuses
+  redirects, because `urllib` forwards `Authorization` headers to redirect
+  targets. Provider endpoints must use HTTPS unless they are loopback servers.
+
+### Docker backend
+
+- Network disabled, CPU/memory/PID limits, all capabilities dropped,
+  `no-new-privileges`, read-only root filesystem, UID 65532, source mounted
+  read-only and copied to a tmpfs. One container per grading group, removed on
+  completion, timeout, or cancellation.
+
+### API
+
+- Request bodies are capped (`TENDER_MAX_REQUEST_BYTES`), optional bearer token
+  for mutating routes (`TENDER_API_TOKEN`), optional rate limiting, strict
+  dashboard CSP, `nosniff`, `DENY` framing, `no-referrer`.
+
+## Known limitations (not fixed)
+
+- **The code under test runs inside the same process as the test runner.** A
+  patch designed to forge results (for example by exiting with status 0 at
+  import time, or by locating and rewriting a report file) can still mislead a
+  command-exit-code check. Restoring evaluator files and rejecting tool shadowing
+  removes the common vectors. Structured pytest checks in patch evaluation also
+  take their required test IDs from candidate-independent sources and reconcile
+  them with a total-checked JUnit report: every required test, identified by its
+  full node ID, must be reported exactly once as passed. A patch that deletes or
+  rewrites report entries is caught. What remains possible is code that
+  rewrites the report consistently *and* forces exit status 0 from inside the
+  test process.
+  Treat acceptance as strong evidence, not proof.
+- Docker isolation depends on a privileged host Docker daemon. The local Compose
+  worker mounts the Docker socket, which is equivalent to host root.
+- The local backend is not isolation. It exists for trusted fixtures and
+  explicitly trusted patches (`--trust-local-execution`).
+- Container image provenance is not pinned by digest unless you configure
+  `TENDER_SANDBOX_IMAGE` with one.
+- Docker `create`/`start`/initialization calls have fixed 30-second limits and
+  are not interrupted by cancellation; command execution is.
+- The API has a shared-secret gate, not user authentication or authorization.
+  Without `TENDER_API_TOKEN`, bind it to loopback.
+- Evidence bundles are hashed and self-consistent, but not signed or
+  independently attested.
+
+## Required controls before any public deployment
+
+1. Map authorized repository IDs to server-managed workspaces; never accept
+   arbitrary host paths.
+2. Run all candidate execution in disposable isolated workers without the Docker
+   socket or host secrets.
+3. Default to no network; if dependency setup needs network, use an allowlisted
+   proxy and record it.
+4. Authenticate users; enforce repository permissions, quotas, and concurrency.
+5. Keep credentials in the control plane; require human approval for any
+   external side effect.
+6. Sign evidence bundles with a key the evaluator controls.
 
 ## Repository content and prompt injection
 
-Repository text is evidence, not authority. Provider prompts should label retrieved text and issue content as untrusted, quote it as data, and explicitly disallow instructions within it from changing tools, policies, credentials, or workflow. The server—not the model—validates every tool argument and enforces file roots, command policies, budgets, and approval gates. Terminal output is also untrusted and must be bounded before it is fed back to a model.
-
-## Incident posture
-
-Before production, define run termination, worker destruction, credential rotation, artifact retention, audit export, and abuse-report handling. A sandbox timeout or worker crash must destroy the execution environment and preserve a bounded diagnostic record without exposing host details.
+Repository text is evidence, not authority. Prompts label retrieved text and
+issue content as untrusted data. The server, not the model, validates every tool
+argument and enforces file roots, the tool allowlist, budgets, and approval
+gates. Terminal output is bounded before it is fed back to a model.

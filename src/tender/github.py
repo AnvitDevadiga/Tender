@@ -7,6 +7,7 @@ import re
 from urllib import request
 from urllib.parse import urlparse
 
+from . import net
 from .models import ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS, Issue
 
 
@@ -47,13 +48,14 @@ class GitHubIssueClient:
         return await asyncio.to_thread(self._fetch_sync, canonical_url, owner, repo, number)
 
     def _fetch_sync(self, url: str, owner: str, repo: str, number: int) -> Issue:
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "Tender/0.1"}
+        headers = {"Accept": "application/vnd.github+json", "User-Agent": "Tender/0.2"}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         req = request.Request(
             f"https://api.github.com/repos/{owner}/{repo}/issues/{number}", headers=headers
         )
-        with request.urlopen(req, timeout=self.timeout) as response:
+        # Redirects are refused: the bearer token can only reach api.github.com.
+        with net.open_url(req, timeout=self.timeout) as response:
             final_url = urlparse(response.geturl())
             if final_url.scheme != "https" or final_url.hostname != "api.github.com":
                 raise ValueError("GitHub API redirected to an unsupported host")

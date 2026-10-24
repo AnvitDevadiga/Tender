@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextvars
 import os
 import signal
 import subprocess
@@ -12,6 +13,66 @@ from typing import Protocol
 
 MAX_COMMAND_OUTPUT_BYTES = 64 * 1024
 _OUTPUT_TRUNCATION_MARKER = b"\n...[Tender output truncated]"
+_POLL_SECONDS = 0.05
+
+
+class ExecutionBudget:
+    """A run-wide wall-clock deadline plus a cancellation flag.
+
+    The active budget travels in a context variable, which ``asyncio.to_thread``
+    copies into worker threads, so every bounded subprocess started on behalf of
+    a workflow observes the same deadline and cancellation without threading the
+    object through each call signature.
+    """
+
+    def __init__(self, deadline_seconds: float | None = None) -> None:
+        self.started = time.monotonic()
+        self.deadline = self.started + deadline_seconds if deadline_seconds else None
+        self.cancelled = threading.Event()
+        self._lock = threading.Lock()
+        self._processes: set[int] = set()
+
+    def remaining(self) -> float | None:
+        if self.deadline is None:
+            return None
+        return self.deadline - time.monotonic()
+
+    def exhausted(self) -> bool:
+        remaining = self.remaining()
+        return self.cancelled.is_set() or (remaining is not None and remaining <= 0)
+
+    def command_timeout(self, configured: float) -> float:
+        remaining = self.remaining()
+        return configured if remaining is None else max(0.0, min(configured, remaining))
+
+    def cancel(self) -> None:
+        """Stop new work and kill every live process group started under this budget."""
+        self.cancelled.set()
+        with self._lock:
+            groups = list(self._processes)
+        for group in groups:
+            try:
+                os.killpg(group, signal.SIGKILL)
+            except (ProcessLookupError, PermissionError):
+                pass
+
+    def _register(self, pid: int) -> None:
+        with self._lock:
+            self._processes.add(pid)
+
+    def _unregister(self, pid: int) -> None:
+        with self._lock:
+            self._processes.discard(pid)
+
+    @property
+    def live_processes(self) -> int:
+        with self._lock:
+            return len(self._processes)
+
+
+current_budget: contextvars.ContextVar[ExecutionBudget | None] = contextvars.ContextVar(
+    "tender_execution_budget", default=None
+)
 
 
 def _run_bounded(
@@ -23,7 +84,15 @@ def _run_bounded(
     shell: bool = False,
     executable: str | None = None,
 ) -> tuple[int | None, str, str, bool]:
-    """Drain command pipes while retaining only a bounded prefix of each stream."""
+    """Drain command pipes while retaining only a bounded prefix of each stream.
+
+    The command runs in its own process group. It is killed when its timeout
+    elapses, when the active ExecutionBudget deadline passes, or when that
+    budget is cancelled; in each case ``timed_out`` is reported.
+    """
+    budget = current_budget.get()
+    if budget is not None and budget.exhausted():
+        return None, "", "Tender execution budget exhausted before the command started.", True
     process = subprocess.Popen(
         command,
         cwd=cwd,
@@ -54,23 +123,36 @@ def _run_bounded(
     ]
     for reader in readers:
         reader.start()
+    if budget is not None:
+        budget._register(process.pid)
     timed_out = False
+    deadline = time.monotonic() + timeout_seconds
     try:
-        return_code = process.wait(timeout=timeout_seconds)
-    except subprocess.TimeoutExpired:
-        timed_out = True
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        return_code = process.wait(timeout=5)
-    else:
-        # A shell can exit while a background child keeps running with inherited
-        # pipes. End the per-command process group when the foreground exits.
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+        while True:
+            try:
+                return_code = process.wait(timeout=_POLL_SECONDS)
+                # A cancel() that killed the group directly still counts as cancelled.
+                timed_out = budget is not None and budget.cancelled.is_set()
+                break
+            except subprocess.TimeoutExpired:
+                if time.monotonic() >= deadline or (budget is not None and budget.exhausted()):
+                    timed_out = True
+                    try:
+                        os.killpg(process.pid, signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                    return_code = process.wait(timeout=5)
+                    break
+        if not timed_out:
+            # A shell can exit while a background child keeps running with inherited
+            # pipes. End the per-command process group when the foreground exits.
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+    finally:
+        if budget is not None:
+            budget._unregister(process.pid)
     for reader in readers:
         reader.join(timeout=5)
     for name in output:
@@ -82,6 +164,11 @@ def _run_bounded(
         output["stderr"].decode("utf-8", errors="replace"),
         timed_out,
     )
+
+
+def _budgeted(timeout_seconds: float) -> float:
+    budget = current_budget.get()
+    return timeout_seconds if budget is None else budget.command_timeout(timeout_seconds)
 
 
 @dataclass(frozen=True)
@@ -127,7 +214,7 @@ class Sandbox:
                 environment=environment,
                 shell=True,
                 executable="/bin/sh",
-                timeout_seconds=self.timeout_seconds,
+                timeout_seconds=_budgeted(self.timeout_seconds),
             )
             return CommandResult(
                 command,
@@ -280,7 +367,7 @@ class DockerSandbox:
                     "-lc",
                     command,
                 ],
-                timeout_seconds=self.timeout_seconds,
+                timeout_seconds=_budgeted(self.timeout_seconds),
             )
             if timed_out:
                 self.destroy()

@@ -1,0 +1,36 @@
+{
+  "evaluator_assets": [
+    {
+      "bytes": 278,
+      "path": "tests/test_median_target.py",
+      "sha256": "dcccdb80645a61df862ace6c85043f8ff63017cb8a2d6e8435f0089bb802838f"
+    }
+  ],
+  "evaluator_sections": [],
+  "passed": true,
+  "policy": {
+    "evaluator_sections": {
+      "pyproject.toml": "tool.pytest",
+      "setup.cfg": "tool:pytest",
+      "tox.ini": "pytest"
+    },
+    "protected_paths": [
+      ".tender/**"
+    ],
+    "reject_tool_shadowing": true,
+    "restored_paths": [
+      "conftest.py",
+      "**/conftest.py",
+      "pytest.ini",
+      "pytest.toml",
+      ".pytest.toml",
+      "noxfile.py",
+      "tests/**",
+      "test/**"
+    ]
+  },
+  "removed_patch_additions": [],
+  "restored_from_base": [],
+  "tested_as_submitted": true,
+  "violations": []
+}

@@ -1,0 +1,23 @@
+{
+  "git": "git version 2.54.0 (Apple Git-157)",
+  "implementation": "cpython",
+  "machine": "arm64",
+  "platform": "macOS-27.0.1",
+  "python": "3.12.14",
+  "python_command": "python3",
+  "sandbox": {
+    "backend": "docker",
+    "capabilities": "all dropped",
+    "cpus": "2",
+    "image": "tender-sandbox:local",
+    "image_pinned_by_digest": false,
+    "isolation": "docker container",
+    "memory": "2g",
+    "network": "none",
+    "pids_limit": 256,
+    "root_filesystem": "read-only",
+    "user": "65532:65532"
+  },
+  "tender_version": "0.2.0",
+  "trust_local_execution": null
+}

@@ -1,48 +1,91 @@
 # Deployment
 
-## Current local deployment
+Tender is a local, single-operator tool. These instructions run it on your own
+machine. Do not expose the API publicly (see [Security](SECURITY.md)).
 
-The current `docker-compose.yml` builds separate API, worker, and sandbox images. The API image has no Docker CLI or socket. Both services share a host-persisted SQLite database, artifact directory, and curated fixture workspace. The worker alone receives the Docker socket and uses a host-visible temp bind mount so the host Docker daemon can access sandbox source paths. The dedicated sandbox image includes Git for repository tools and is used inside resource-limited attempt containers. This setup is for local development only. Docker socket access grants powerful control over the host and this is not a safe public arbitrary-code execution deployment.
-The API port binds to `127.0.0.1` so it is not exposed on the local network by default.
+## Prerequisites
+
+| Need | For | Notes |
+| --- | --- | --- |
+| Python 3.12+ and Git | everything | `pip install -e '.[dev]'` or the built wheel |
+| Docker daemon + `tender-sandbox:local` | untrusted code (patch verification, API runs) | `docker build -f Dockerfile.sandbox -t tender-sandbox:local .` (includes pytest; no network at run time) |
+| Fixture commits | benchmark tasks and tests | `python scripts/prepare_fixtures.py` (deterministic) |
+| Model provider key | agent runs with a real model only | `GROQ_API_KEY`, or `OPENAI_API_KEY` (+ `OPENAI_BASE_URL`, HTTPS unless loopback) |
+| Node.js | JavaScript unit tests only | optional |
+
+## Environment variables
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `TENDER_DB_PATH` | `tender.db` | SQLite database |
+| `TENDER_WORKSPACE_ROOT` | unset (API execution disabled) | API/worker runs must name a workspace beneath this root |
+| `TENDER_ARTIFACT_ROOT` | `artifacts` | Worker artifact directories |
+| `TENDER_REPORT_ROOT` | unset | Directory of patch reports served at `/reports` |
+| `TENDER_SANDBOX_IMAGE` | `python:3.12-slim` | Docker image for commands; use `tender-sandbox:local` (pin by digest for provenance) |
+| `TENDER_REQUIRE_PINNED_COMMIT` | off | Reject API runs without `issue.base_commit` |
+| `TENDER_API_TOKEN` | unset | Bearer token for mutating routes; bind to loopback without it |
+| `TENDER_APPROVAL_TOKEN` | unset | ≥32 characters; enables the human-approval endpoint |
+| `TENDER_MAX_REQUEST_BYTES` | 1048576 | Request body cap |
+| `TENDER_RATE_LIMIT_PER_MINUTE`, `TENDER_RATE_LIMIT_BURST` | 0 (off), 10 | In-process limiter for mutating routes |
+| `TENDER_WORKER_POLL_SECONDS`, `TENDER_WORKER_LEASE_SECONDS`, `TENDER_WORKER_RECOVERY_SECONDS` | 1, 90, 15 | Worker tuning |
+
+## Local API and dashboard
 
 ```bash
+TENDER_REPORT_ROOT=demo/data/patch-demo uvicorn tender.api:app --host 127.0.0.1
+open http://127.0.0.1:8000/dashboard/
+```
+
+The dashboard is packaged inside the wheel (`tender/web/`), so installed
+packages and Docker images serve it without a source checkout.
+
+## Queue + worker
+
+```bash
+export TENDER_WORKSPACE_ROOT=$PWD/benchmarks/fixtures TENDER_SANDBOX_IMAGE=tender-sandbox:local
+uvicorn tender.api:app --host 127.0.0.1 &
+tender worker &
+curl -s -X POST http://127.0.0.1:8000/runs -H 'content-type: application/json' -d '{
+  "workspace": "forgecalc",
+  "config": {"sandbox": "docker", "model": "groq/openai/gpt-oss-20b"},
+  "issue": {"repository": "local/forgecalc", "title": "Fix percentage",
+            "base_commit": "<full commit of the fixture HEAD>"}}'
+```
+
+The API only queues. The worker claims a run, holds a renewable lease, validates
+the workspace and commit, and executes. Expired runs fail without replay. Only
+queued runs can be cancelled.
+
+## Docker Compose (local development)
+
+```bash
+cp .env.example .env    # fill only what you need; never commit it
 docker compose up --build
 ```
 
-Compose mounts local state under `.tender-data/`, which is gitignored. The example fixture workspace is mounted read-only at `/workspaces`; use task paths relative to it. The worker needs the host Docker daemon running. Workers heartbeat renewable leases; expired jobs are marked failed without replay, and stale owners cannot commit further run state. The queue can coordinate concurrent claims, though this local Compose example starts one worker by default.
+Compose builds the API, worker, and sandbox images. The API binds to
+`127.0.0.1:8000` and has no Docker access. **The worker mounts the host Docker
+socket, which is equivalent to root on the host.** This is for local development
+only. State is kept under `.tender-data/` (git-ignored); fixtures are mounted
+read-only at `/workspaces`.
 
-Copy `.env.example` to `.env`; Compose interpolates the listed provider, approval, and GitHub values into only the required service. Never commit `.env`. Never mount the Docker socket into a public API container or a public worker.
+## Static demo (GitHub Pages)
+
+```bash
+python scripts/record_replay.py --check
+bash scripts/build_demo_site.sh _site
+python3 -m http.server 8765 --directory _site
+```
+
+`.github/workflows/deploy-demo.yml` publishes `_site` to
+`https://anvitdevadiga.github.io/Tender/` on pushes to `main` that touch the
+demo, dashboard, or published experiments. The site is static and read-only.
 
 ## API operations
 
-- `GET /health` is a liveness check; `GET /ready` verifies the SQLite store answers queries and is suitable for container readiness probes.
-- `GET /runs` supports `status`, `limit`, `offset`, and `summary=true` (drops patch, test-output, and issue-body payloads); `GET /runs/{id}/events` supports `limit` and `offset` and returns up to 5000 events per page by default (20000 maximum), so page long histories with `offset`; `GET /metrics` reports queue depth, pass rate, latency percentiles (p50/p95), token/tool totals, and per-model/per-benchmark summaries.
-- `POST /runs` enqueues work. `POST /runs/{id}/cancel` cancels a queued (unclaimed) run atomically; running runs cannot be cancelled and return HTTP 409.
-- Set `TENDER_API_TOKEN` to require `Authorization: Bearer <token>` on `POST /runs` and `POST /runs/{id}/cancel`; leave it unset only while the API stays bound to loopback. Set `TENDER_MAX_REQUEST_BYTES` to tune the request-body cap. Optionally set `TENDER_RATE_LIMIT_PER_MINUTE` (for example `60`) and `TENDER_RATE_LIMIT_BURST` to throttle mutating routes per client host within one process; rejections return 429 with `Retry-After`. Dashboard responses carry a strict Content-Security-Policy, so keep dashboard assets free of inline scripts and styles.
-- Workers finish the current run and exit on SIGINT/SIGTERM; a second stop signal exits immediately if a run is stuck. `TENDER_WORKER_RECOVERY_SECONDS` controls how often idle workers scan for expired leases (default 15s).
-
-## Production target
-
-```mermaid
-flowchart LR
-  Browser --> Web[Next.js]
-  Web --> API[FastAPI control plane]
-  API --> DB[(PostgreSQL)]
-  API --> Queue[(Durable queue)]
-  Queue --> Worker[Execution worker]
-  Worker --> Sandbox[Isolated sandbox]
-  Sandbox --> Repo[Pinned repository + tests]
-```
-
-The control plane and execution plane should scale independently. Workers must not inherit provider, database, or GitHub credentials. Sandbox jobs should be disposable and resource-limited. Use authentication, per-user quotas, curated public demo tasks, and explicit approval for GitHub writes.
-
-The repository does not yet provide production deployment manifests, PostgreSQL migrations, production worker health management, or a public coding execution service. The portfolio page is interactive playback of recorded evidence, but accepts no task and runs no submitted code. Local SQLite-backed worker leases are implemented, but they do not replace production queue/health infrastructure. Do not infer production readiness from the local Compose file. Serverless request execution is not suitable for persistent sandbox workloads.
-
-## Pre-production checklist
-
-- Configure PostgreSQL and migrations, worker leases/health checks, and persistent artifact storage.
-- Separate API and worker identities and credentials; do not mount the Docker socket into the API.
-- Enforce auth, permissions, rate/concurrency limits, and curated demo restrictions.
-- Apply network, CPU, memory, PID, disk, and duration limits to disposable sandboxes.
-- Configure TLS, secret management, log redaction/retention, backups, and recovery procedures.
-- Run CI/security tests and verify a pinned end-to-end benchmark in the deployment environment.
+- `GET /health` liveness; `GET /ready` checks the database.
+- `GET /runs` (`status`, `limit`, `offset`, `summary=true`; `X-Total-Count`),
+  `GET /runs/{id}`, `GET /runs/{id}/events`, `GET /runs/{id}/artifact`.
+- `POST /runs`, `POST /runs/{id}/cancel`, `POST /runs/{id}/approval`.
+- `GET /metrics`: SQL aggregates over every run, with `coverage`.
+- `GET /reports`, `GET /reports/{id}`: patch verification reports.

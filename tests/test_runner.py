@@ -347,11 +347,19 @@ def test_offline_experiment_runs_setup_patch_and_independent_verification(
     record = output["runs"][0]
     assert output["complete"] is True
     assert record["passed"] is True
-    assert record["regression_free"] is True
+    # Erratum E6: without regression commands, regression preservation is not
+    # measured, so it is reported as not configured rather than as a pass.
+    assert record["regression_free"] is None
+    assert record["target_outcome"] == "passed"
+    assert record["regression_outcome"] == "not_configured"
+    assert record["independent_final_verification"] is True
+    assert record["outcome"]["overall"] == "accepted"
     assert record["input_tokens"] == 12
     assert record["output_tokens"] == 18
     assert record["cost_usd"] is None
-    assert output["summary"]["regression_free_rate"] == 1.0
+    assert output["summary"]["regression_free_rate"] is None
+    assert output["schema_version"] == 3
+    assert output["manifest"]["snapshot"].startswith('name = "')
     assert output["summary"]["sample_size_warning"]
     assert (repository / "app.py").read_text(encoding="utf-8").endswith("return 1\n")
 

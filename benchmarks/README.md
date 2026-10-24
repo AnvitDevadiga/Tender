@@ -29,4 +29,6 @@ python -m tender run-experiment \
   --manifest experiments/retry-ablation-v1.toml \
   --dataset benchmarks/tasks.jsonl \
   --output results/fixture-retry-ablation.json
+# This manifest calls Groq: add max_provider_calls to a copy of it and pass
+# --authorize-live-provider. Without both, Tender refuses to start.
 ```

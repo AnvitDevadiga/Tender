@@ -3,19 +3,23 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import shutil
+import math
+import random
 import subprocess
 import tempfile
 from collections import Counter
 from pathlib import Path
-from time import monotonic
+from time import monotonic, perf_counter
 
 from .artifacts import ArtifactStore
 from .experiments import BenchmarkTask, ExperimentManifest
 from .models import BenchmarkConfig, EvaluationRun, FailureCategory, RunEvent, RunStatus
+from .outcomes import CheckOutcome, EvaluationOutcome
+from .repository import RepositoryError
 from .runtime import provider_for
-from .sandbox import Sandbox
+from .sandbox import create_sandbox
 from .services import RunService
+from .snapshot import TrustedRepository
 from .store import RunStore
 from .workflow import PatchApplier
 
@@ -35,255 +39,179 @@ def verify_final_patch(
     setup_commands: tuple[str, ...],
     commands: tuple[str, ...],
     timeout_seconds: int,
+    *,
+    sandbox_backend: str = "local",
+    base_commit: str | None = None,
 ) -> tuple[bool, list[dict[str, object]]]:
-    """Run independent checks against a clean copy with the final agent patch applied."""
-    shutil.copytree(base_workspace, destination)
+    """Run independent checks in a fresh workspace materialized at the base commit.
+
+    The destination is created from Git objects (never a filesystem copy of a
+    possibly mutated directory), so earlier attempts cannot leak into it.
+    """
+    with TrustedRepository(base_workspace) as repository:
+        commit = base_commit or repository.head_commit()
+        if commit is None:
+            raise ValueError("verification base has no commit")
+        repository.materialize(commit, destination)
     PatchApplier().apply(destination, patch)
-    sandbox = Sandbox(destination, timeout_seconds=timeout_seconds)
+    sandbox = create_sandbox(destination, sandbox_backend, timeout_seconds)
     results: list[dict[str, object]] = []
     passed = True
-    for command in setup_commands + commands:
-        checked = sandbox.run(command)
-        result = {
-            "kind": "setup" if command in setup_commands else "verification",
-            "command": command,
-            "passed": checked.passed,
-            "timed_out": checked.timed_out,
-            "return_code": checked.return_code,
-            "duration_ms": checked.duration_ms,
-            "stdout": checked.stdout[-4000:],
-            "stderr": checked.stderr[-4000:],
-        }
-        results.append(result)
-        if not checked.passed:
-            passed = False
-            if checked.timed_out:
-                break
+    try:
+        for command in setup_commands + commands:
+            checked = sandbox.run(command)
+            result = {
+                "kind": "setup" if command in setup_commands else "verification",
+                "command": command,
+                "passed": checked.passed,
+                "timed_out": checked.timed_out,
+                "return_code": checked.return_code,
+                "duration_ms": checked.duration_ms,
+                "stdout": checked.stdout[-4000:],
+                "stderr": checked.stderr[-4000:],
+            }
+            results.append(result)
+            if not checked.passed:
+                passed = False
+                if checked.timed_out:
+                    break
+    finally:
+        sandbox.destroy()
     return passed, results
 
 
+def plan_trials(
+    tasks: list[BenchmarkTask], manifest: ExperimentManifest
+) -> list[tuple[BenchmarkTask, int, int, int]]:
+    """Expand the manifest into trials in the configured, reproducible order.
+
+    ``sequential`` keeps the legacy nesting. ``randomized`` shuffles all trials
+    with ``seed``. ``counterbalanced`` keeps each task's matched trials together
+    but rotates the configuration order per task and repetition, so no
+    configuration always runs first (provider warm-up or quota drift).
+    """
+    configs = [
+        (retrieval_limit, retry_budget)
+        for retrieval_limit in manifest.retrieval_limits
+        for retry_budget in manifest.retry_budgets
+    ]
+    if manifest.trial_order == "counterbalanced":
+        trials = []
+        for task_index, task in enumerate(tasks):
+            for repetition in range(manifest.repetitions):
+                shift = (task_index + repetition) % len(configs)
+                for retrieval_limit, retry_budget in configs[shift:] + configs[:shift]:
+                    trials.append((task, retrieval_limit, retry_budget, repetition))
+        return trials
+    trials = [
+        (task, retrieval_limit, retry_budget, repetition)
+        for task in tasks
+        for retrieval_limit, retry_budget in configs
+        for repetition in range(manifest.repetitions)
+    ]
+    if manifest.trial_order == "randomized":
+        random.Random(manifest.seed).shuffle(trials)
+    return trials
+
+
+class LiveProviderNotAuthorized(ValueError):
+    """A manifest would call a billable provider without an explicit budget and consent."""
+
+
+def authorize_live_run(manifest: ExperimentManifest, authorized: bool) -> None:
+    if not manifest.uses_live_provider:
+        return
+    if manifest.max_provider_calls is None:
+        raise LiveProviderNotAuthorized(
+            f"manifest {manifest.name} uses a live provider ({manifest.model}) but sets no "
+            "max_provider_calls budget"
+        )
+    if not authorized:
+        raise LiveProviderNotAuthorized(
+            f"manifest {manifest.name} would call {manifest.model} (up to "
+            f"{manifest.max_provider_calls} provider calls); rerun with --authorize-live-provider"
+        )
+
+
+EXCLUDED_CATEGORIES = {
+    FailureCategory.PROVIDER.value: "provider_failure",
+    FailureCategory.ENVIRONMENT.value: "environment_failure",
+}
+
+
 async def run_experiment(
-    manifest_path: str | Path, dataset_path: str | Path, output_path: str | Path
+    manifest_path: str | Path,
+    dataset_path: str | Path,
+    output_path: str | Path,
+    *,
+    authorize_live_provider: bool = False,
 ) -> dict[str, object]:
     manifest = ExperimentManifest.load(manifest_path)
+    authorize_live_run(manifest, authorize_live_provider)
     tasks = BenchmarkTask.load_jsonl(dataset_path)
     if not tasks:
         raise ValueError("benchmark dataset contains no tasks")
-    if manifest.sandbox != "local":
-        raise ValueError(
-            "benchmark runner currently supports only the local trusted-fixture sandbox"
-        )
+    if manifest.sandbox not in {"local", "docker"}:
+        raise ValueError("benchmark sandbox must be local (trusted fixtures only) or docker")
     dataset_root = Path.cwd()
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     store = RunStore(output_path.parent / ".tender-runs.db")
     artifacts = ArtifactStore(output_path.parent / "artifacts")
-    results = []
+    trials = plan_trials(tasks, manifest)
+    results: list[dict[str, object]] = []
     deadline = monotonic() + manifest.max_minutes * 60
-    budget_exhausted = False
-    for task in tasks:
-        for retrieval_limit in manifest.retrieval_limits:
-            for retry_budget in manifest.retry_budgets:
-                for repetition in range(manifest.repetitions):
-                    remaining = deadline - monotonic()
-                    if remaining <= 0:
-                        budget_exhausted = True
-                        break
-                    with tempfile.TemporaryDirectory(prefix="tender-") as temp_dir:
-                        source_workspace = Path(task.workspace)
-                        if not source_workspace.is_absolute() and not source_workspace.exists():
-                            source_workspace = dataset_root / source_workspace
-                        if not source_workspace.is_dir():
-                            raise ValueError(
-                                f"benchmark workspace does not exist: {task.workspace}"
-                            )
-                        source_root = subprocess.run(
-                            ["git", "rev-parse", "--show-toplevel"],
-                            cwd=source_workspace,
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                        ).stdout.strip()
-                        if Path(source_root).resolve() != source_workspace.resolve():
-                            raise ValueError(
-                                f"task {task.task_id}: workspace must be the Git repository root"
-                            )
-                        source_status = subprocess.run(
-                            ["git", "status", "--porcelain", "--untracked-files=all"],
-                            cwd=source_workspace,
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                        ).stdout
-                        if source_status.strip():
-                            raise ValueError(
-                                f"task {task.task_id}: source workspace must be clean "
-                                "before benchmarking"
-                            )
-                        workspace = Path(temp_dir) / "repo"
-                        shutil.copytree(source_workspace, workspace)
-                        subprocess.run(
-                            ["git", "checkout", "--detach", task.base_commit],
-                            cwd=workspace,
-                            check=True,
-                            capture_output=True,
-                        )
-                        actual_commit = subprocess.run(
-                            ["git", "rev-parse", "HEAD"],
-                            cwd=workspace,
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                        ).stdout.strip()
-                        if actual_commit.lower() != task.base_commit.lower():
-                            raise ValueError(
-                                f"task {task.task_id}: checkout did not resolve to the pinned "
-                                "commit"
-                            )
-                        config = BenchmarkConfig(
-                            model=(
-                                f"{manifest.model.split('/', 1)[0]}/"
-                                f"{manifest.model.split('/', 1)[1]}"
-                            )
-                            if "/" in manifest.model
-                            else manifest.model,
-                            architecture=manifest.architecture,
-                            retrieval=manifest.retrieval,
-                            retrieval_limit=retrieval_limit,
-                            max_retries=retry_budget,
-                            setup_commands=list(task.setup_commands),
-                            commands=list(task.test_commands),
-                            static_analysis_commands=list(task.static_analysis_commands),
-                            verification_commands=list(task.verification_tests),
-                            sandbox=manifest.sandbox,
-                            timeout_seconds=min(
-                                manifest.timeout_seconds,
-                                task.timeout_seconds,
-                                int(max(1, remaining)),
-                            ),
-                            max_output_tokens=manifest.max_tokens,
-                        )
-                        service = RunService(
-                            provider=provider_for(config),
-                            store=store,
-                            artifacts=artifacts,
-                        )
-                        run = EvaluationRun(
-                            issue=task.issue, config=config, benchmark_id=manifest.name
-                        )
-                        try:
-                            run = await asyncio.wait_for(
-                                service.execute_workflow(run, str(workspace)),
-                                timeout=max(0.1, deadline - monotonic()),
-                            )
-                        except TimeoutError:
-                            run.status = RunStatus.FAILED
-                            run.failure_category = FailureCategory.TIMEOUT
-                            run.test_output = "Experiment max_minutes budget exhausted."
-                            run.metadata["budget_exhausted"] = True
-                            service.store.save_run(run)
-                            budget_exhausted = True
-                        passed = run.status is RunStatus.PASSED
-                        verification_results = []
-                        target_tests_passed = passed
-                        if passed:
-                            if not run.patch:
-                                passed = False
-                                verification_results.append(
-                                    {
-                                        "passed": False,
-                                        "reason": "successful run did not contain a patch artifact",
-                                    }
-                                )
-                            else:
-                                try:
-                                    verification_workspace = Path(temp_dir) / "verification"
-                                    passed, verification_results = verify_final_patch(
-                                        workspace,
-                                        verification_workspace,
-                                        run.patch,
-                                        task.setup_commands,
-                                        task.verification_tests,
-                                        min(
-                                            task.timeout_seconds,
-                                            int(max(1, deadline - monotonic())),
-                                        ),
-                                    )
-                                except (OSError, ValueError, subprocess.SubprocessError) as exc:
-                                    passed = False
-                                    verification_results.append(
-                                        {
-                                            "passed": False,
-                                            "reason": (
-                                                "final patch verification failed: "
-                                                f"{type(exc).__name__}: {str(exc)[:300]}"
-                                            ),
-                                        }
-                                    )
-                            run.metadata["verification_results"] = verification_results
-                            if not passed:
-                                run.status = RunStatus.FAILED
-                                run.failure_category = FailureCategory.TEST
-                                run.test_output = (
-                                    run.test_output or ""
-                                ) + "\nIndependent verification failed."
-                            service.store.append_event(
-                                RunEvent(
-                                    run_id=run.id,
-                                    name="benchmark.verification.completed",
-                                    payload={"passed": passed, "checks": verification_results},
-                                )
-                            )
-                            service.artifacts.record_verification(run, verification_results)
-                            service.store.save_run(run)
-                        results.append(
-                            {
-                                "task_id": task.task_id,
-                                "task": str(task.issue.id),
-                                "repository": task.issue.repository,
-                                "base_commit": actual_commit,
-                                "retry_budget": retry_budget,
-                                "retrieval_limit": retrieval_limit,
-                                "repetition": repetition,
-                                "run_id": str(run.id),
-                                "complete": not budget_exhausted,
-                                "passed": passed,
-                                "target_tests_passed": target_tests_passed,
-                                "regression_free": (passed if target_tests_passed else None),
-                                "attempts": run.attempts,
-                                "failure_category": run.failure_category.value,
-                                "latency_ms": run.latency_ms,
-                                "patch_bytes": (
-                                    len(run.patch.encode("utf-8"))
-                                    if run.patch is not None
-                                    else None
-                                ),
-                                "model": config.model,
-                                "architecture": config.architecture,
-                                "retrieval": config.retrieval,
-                                "input_tokens": run.input_tokens,
-                                "output_tokens": run.output_tokens,
-                                "cost_usd": run.cost_usd,
-                                "published_rate_cost_estimate_usd": _published_rate_cost_estimate(
-                                    manifest, run.input_tokens, run.output_tokens
-                                ),
-                                "tool_calls": run.tool_calls,
-                                "verification": verification_results,
-                            }
-                        )
-                    if budget_exhausted:
-                        break
-                if budget_exhausted:
-                    break
-        if budget_exhausted:
+    stop_reason: str | None = None
+    consecutive_provider_failures = 0
+    provider_calls = 0
+    for trial_index, (task, retrieval_limit, retry_budget, repetition) in enumerate(trials):
+        remaining = deadline - monotonic()
+        if remaining <= 0:
+            stop_reason = "max_minutes_budget"
+        elif (
+            manifest.max_provider_calls is not None
+            and provider_calls >= manifest.max_provider_calls
+        ):
+            stop_reason = "max_provider_calls_budget"
+        elif (
+            manifest.max_consecutive_provider_failures is not None
+            and consecutive_provider_failures >= manifest.max_consecutive_provider_failures
+        ):
+            stop_reason = "consecutive_provider_failures"
+        if stop_reason:
             break
+        record = await _run_trial(
+            manifest,
+            task,
+            retrieval_limit,
+            retry_budget,
+            repetition,
+            trial_index,
+            dataset_root,
+            store,
+            artifacts,
+            deadline,
+            remaining,
+        )
+        results.append(record)
+        provider_calls += int(record["counters"].get("provider_calls", 0))
+        if record["failure_category"] == FailureCategory.PROVIDER.value:
+            consecutive_provider_failures += 1
+        else:
+            consecutive_provider_failures = 0
+        if record.get("budget_exhausted"):
+            stop_reason = "max_minutes_budget"
+            break
+    budget_exhausted = stop_reason is not None
+    raw_manifest = Path(manifest_path).read_text(encoding="utf-8")
     output = {
-        "schema_version": 2,
+        "schema_version": 3,
         "status": "complete" if not budget_exhausted else "partial",
         "manifest": {
             "name": manifest.name,
             "path": str(manifest_path),
             "sha256": file_sha256(manifest_path),
+            "snapshot": raw_manifest,
             "model": manifest.model,
             "architecture": manifest.architecture,
             "retrieval": manifest.retrieval,
@@ -293,6 +221,10 @@ async def run_experiment(
             "max_minutes": manifest.max_minutes,
             "max_tokens": manifest.max_tokens,
             "sandbox": manifest.sandbox,
+            "trial_order": manifest.trial_order,
+            "seed": manifest.seed,
+            "max_consecutive_provider_failures": manifest.max_consecutive_provider_failures,
+            "max_provider_calls": manifest.max_provider_calls,
             "pricing": {
                 "basis": manifest.pricing_basis,
                 "input_usd_per_million_tokens": manifest.input_usd_per_million_tokens,
@@ -306,18 +238,214 @@ async def run_experiment(
             "sha256": file_sha256(dataset_path),
             "declared_version": manifest.dataset,
         },
+        "planned_trials": len(trials),
+        "executed_trials": len(results),
+        "stop_reason": stop_reason,
+        "provider_calls": provider_calls,
         "runs": results,
-        "complete": not budget_exhausted
-        and len(results)
-        == len(tasks)
-        * len(manifest.retrieval_limits)
-        * len(manifest.retry_budgets)
-        * manifest.repetitions,
+        "complete": not budget_exhausted and len(results) == len(trials),
         "budget_exhausted": budget_exhausted,
     }
     output["summary"] = summarize_from_records(results)
     output_path.write_text(json.dumps(output, indent=2), encoding="utf-8")
     return output
+
+
+async def _run_trial(
+    manifest: ExperimentManifest,
+    task: BenchmarkTask,
+    retrieval_limit: int,
+    retry_budget: int,
+    repetition: int,
+    trial_index: int,
+    dataset_root: Path,
+    store: RunStore,
+    artifacts: ArtifactStore,
+    deadline: float,
+    remaining: float,
+) -> dict[str, object]:
+    budget_exhausted = False
+    with tempfile.TemporaryDirectory(prefix="tender-") as temp_dir:
+        source_workspace = Path(task.workspace)
+        if not source_workspace.is_absolute() and not source_workspace.exists():
+            source_workspace = dataset_root / source_workspace
+        if not source_workspace.is_dir():
+            raise ValueError(f"benchmark workspace does not exist: {task.workspace}")
+        # All Git access goes through a sanitized metadata copy: no fixture hooks,
+        # fsmonitor helpers, or filters run on the host.
+        with TrustedRepository(source_workspace) as repository:
+            if repository.identity().dirty:
+                raise ValueError(
+                    f"task {task.task_id}: source workspace must be clean before benchmarking"
+                )
+            actual_commit = repository.resolve_commit(task.base_commit)
+            workspace = repository.materialize(actual_commit, Path(temp_dir) / "repo")
+        if actual_commit != task.base_commit.lower():
+            raise ValueError(f"task {task.task_id}: checkout did not resolve to the pinned commit")
+        config = BenchmarkConfig(
+            model=manifest.model,
+            architecture=manifest.architecture,
+            retrieval=manifest.retrieval,
+            retrieval_limit=retrieval_limit,
+            max_retries=retry_budget,
+            setup_commands=list(task.setup_commands),
+            commands=list(task.test_commands),
+            static_analysis_commands=list(task.static_analysis_commands),
+            verification_commands=list(task.verification_tests),
+            regression_commands=list(task.regression_commands),
+            sandbox=manifest.sandbox,
+            timeout_seconds=min(
+                manifest.timeout_seconds, task.timeout_seconds, int(max(1, remaining))
+            ),
+            deadline_seconds=int(max(1, remaining)),
+            max_output_tokens=manifest.max_tokens,
+        )
+        service = RunService(provider=provider_for(config), store=store, artifacts=artifacts)
+        run = EvaluationRun(issue=task.issue, config=config, benchmark_id=manifest.name)
+        try:
+            run = await asyncio.wait_for(
+                service.execute_workflow(run, str(workspace)),
+                timeout=max(0.1, deadline - monotonic()),
+            )
+        except TimeoutError:
+            run.status = RunStatus.FAILED
+            run.failure_category = FailureCategory.TIMEOUT
+            run.test_output = "Experiment max_minutes budget exhausted."
+            run.metadata["budget_exhausted"] = True
+            run.outcome = EvaluationOutcome(
+                timed_out=True, reasons=["experiment budget"]
+            ).finalize()
+            service.store.save_run(run)
+            budget_exhausted = True
+        passed = run.status is RunStatus.PASSED
+        verification_results: list[dict[str, object]] = []
+        target_tests_passed = passed
+        timing = dict(run.metadata.get("timing_ms") or {})
+        if passed:
+            started = perf_counter()
+            if not run.patch:
+                passed = False
+                verification_results.append(
+                    {"passed": False, "reason": "successful run did not contain a patch artifact"}
+                )
+            else:
+                try:
+                    passed, verification_results = await asyncio.to_thread(
+                        verify_final_patch,
+                        workspace,
+                        Path(temp_dir) / "verification",
+                        run.patch,
+                        task.setup_commands,
+                        task.verification_tests,
+                        min(task.timeout_seconds, int(max(1, deadline - monotonic()))),
+                        sandbox_backend=manifest.sandbox,
+                        base_commit=actual_commit,
+                    )
+                except (OSError, ValueError, RepositoryError, subprocess.SubprocessError) as exc:
+                    passed = False
+                    verification_results.append(
+                        {
+                            "passed": False,
+                            "reason": (
+                                "final patch verification failed: "
+                                f"{type(exc).__name__}: {str(exc)[:300]}"
+                            ),
+                        }
+                    )
+            timing["independent_final_verification"] = round((perf_counter() - started) * 1000)
+            run.metadata["timing_ms"] = timing
+            run.metadata["verification_results"] = verification_results
+            if not passed:
+                run.status = RunStatus.FAILED
+                run.failure_category = FailureCategory.TEST
+                run.test_output = (run.test_output or "") + "\nIndependent verification failed."
+                if run.outcome is not None:
+                    run.outcome.target = CheckOutcome.FAILED
+                    run.outcome.reasons.append("independent final verification failed")
+                    run.outcome.finalize()
+            service.store.append_event(
+                RunEvent(
+                    run_id=run.id,
+                    name="benchmark.verification.completed",
+                    payload={"passed": passed, "checks": verification_results},
+                )
+            )
+            service.artifacts.record_verification(run, verification_results)
+            service.store.save_run(run)
+    outcome = run.outcome.model_dump(mode="json") if run.outcome else None
+    category = run.failure_category.value
+    exclusion = EXCLUDED_CATEGORIES.get(category) if not passed else None
+    regression = outcome["regression"] if outcome else CheckOutcome.UNKNOWN.value
+    return {
+        "trial_index": trial_index,
+        "task_id": task.task_id,
+        "task": str(task.issue.id),
+        "repository": task.issue.repository,
+        "base_commit": actual_commit,
+        "retry_budget": retry_budget,
+        "retrieval_limit": retrieval_limit,
+        "repetition": repetition,
+        "run_id": str(run.id),
+        "complete": not budget_exhausted,
+        "budget_exhausted": budget_exhausted,
+        "passed": passed,
+        "target_tests_passed": target_tests_passed,
+        # v3: regression preservation is only claimed when regression checks ran.
+        "regression_free": (
+            True
+            if regression == CheckOutcome.PASSED.value
+            else False
+            if regression == CheckOutcome.FAILED.value
+            else None
+        ),
+        "target_outcome": outcome["target"] if outcome else CheckOutcome.UNKNOWN.value,
+        "regression_outcome": regression,
+        "independent_final_verification": (
+            all(bool(item.get("passed")) for item in verification_results)
+            if verification_results
+            else None
+        ),
+        "outcome": outcome,
+        "excluded_from_solve_rate": exclusion is not None,
+        "exclusion_reason": exclusion,
+        "attempts": run.attempts,
+        "failure_category": category,
+        "latency_ms": run.latency_ms,
+        "timing_ms": timing,
+        "counters": dict(run.metadata.get("counters") or {}),
+        "patch_bytes": len(run.patch.encode("utf-8")) if run.patch is not None else None,
+        "model": config.model,
+        "architecture": config.architecture,
+        "retrieval": config.retrieval,
+        "input_tokens": run.input_tokens,
+        "output_tokens": run.output_tokens,
+        "cost_usd": run.cost_usd,
+        "published_rate_cost_estimate_usd": _published_rate_cost_estimate(
+            manifest, run.input_tokens, run.output_tokens
+        ),
+        "tool_calls": run.tool_calls,
+        "verification": verification_results,
+    }
+
+
+def wilson_interval(successes: int, trials: int, z: float = 1.96) -> tuple[float, float] | None:
+    """Wilson score interval for a binomial proportion (95% by default)."""
+    if trials <= 0:
+        return None
+    phat = successes / trials
+    denominator = 1 + z * z / trials
+    centre = (phat + z * z / (2 * trials)) / denominator
+    margin = z * math.sqrt(phat * (1 - phat) / trials + z * z / (4 * trials * trials)) / denominator
+    return round(max(0.0, centre - margin), 4), round(min(1.0, centre + margin), 4)
+
+
+def sign_test_p_value(wins: int, losses: int) -> float | None:
+    """Exact two-sided sign test on discordant matched tasks."""
+    n = wins + losses
+    if n == 0:
+        return None
+    tail = sum(math.comb(n, k) for k in range(0, min(wins, losses) + 1)) / 2**n
+    return round(min(1.0, 2 * tail), 4)
 
 
 def summarize_from_records(records: list[dict[str, object]]) -> dict[str, object]:
@@ -332,8 +460,13 @@ def summarize_from_records(records: list[dict[str, object]]) -> dict[str, object
     )
     recovered = sum(bool(record["passed"]) and int(record["attempts"]) > 1 for record in records)
     retryable = sum(int(record["attempts"]) > 1 for record in records)
+    # Only trials whose regression preservation was actually evaluated count:
+    # legacy (v2) records always set regression_free on target passes; v3
+    # records leave it None when no regression checks were configured.
     verified_target_passes = [
-        record for record in records if record.get("target_tests_passed") is True
+        record
+        for record in records
+        if record.get("target_tests_passed") is True and record.get("regression_free") is not None
     ]
     regression_free = sum(
         record.get("regression_free") is True for record in verified_target_passes
@@ -425,8 +558,32 @@ def summarize_from_records(records: list[dict[str, object]]) -> dict[str, object
                 else None
             ),
         }
+    included = [record for record in records if not record.get("excluded_from_solve_rate")]
+    included_passed = sum(bool(record["passed"]) for record in included)
+    exclusions = Counter(
+        str(record.get("exclusion_reason"))
+        for record in records
+        if record.get("excluded_from_solve_rate")
+    )
+    target_outcomes = Counter(
+        str(record["target_outcome"]) for record in records if "target_outcome" in record
+    )
+    regression_outcomes = Counter(
+        str(record["regression_outcome"]) for record in records if "regression_outcome" in record
+    )
+    interval = wilson_interval(included_passed, len(included))
     return {
         "runs": count,
+        "included_runs": len(included),
+        "excluded_runs": dict(sorted(exclusions.items())),
+        "solve_rate_included": included_passed / len(included) if included else None,
+        "solve_rate_wilson_95": list(interval) if interval else None,
+        "uncertainty_note": (
+            "Wilson 95% interval over included trials; repeated trials of one task are not "
+            "independent, so the interval understates uncertainty about new tasks."
+        ),
+        "target_outcomes": dict(sorted(target_outcomes.items())),
+        "regression_outcomes": dict(sorted(regression_outcomes.items())),
         "status": "complete"
         if records and all(record.get("complete", True) for record in records)
         else "partial",
@@ -601,6 +758,7 @@ def compare_experiment_results(paths: list[str | Path]) -> dict[str, object]:
             }
         )
     return {
+        "matched_tasks": _matched_task_comparison(grouped),
         "dataset_sha256": dataset_hash,
         "task_ids": list(task_cohort or ()),
         "retry_budgets": list(retry_budgets or ()),
@@ -628,7 +786,56 @@ def _paired_task_outcomes(records: list[dict[str, object]]) -> list[dict[str, ob
     ]
 
 
+def _matched_task_comparison(
+    grouped: dict[tuple[str, str, str, int], list[dict[str, object]]],
+) -> dict[str, object] | None:
+    """Task-level comparison of exactly two configurations on the same tasks.
+
+    Excluded trials (provider/environment failures) are dropped first; a task
+    counts only when both configurations have at least one included trial.
+    """
+    if len(grouped) != 2:
+        return None
+    (first_key, first), (second_key, second) = sorted(grouped.items())
+
+    def rates(records: list[dict[str, object]]) -> dict[str, float]:
+        by_task: dict[str, list[bool]] = {}
+        for record in records:
+            if record.get("excluded_from_solve_rate"):
+                continue
+            by_task.setdefault(str(record["task_id"]), []).append(bool(record["passed"]))
+        return {task: sum(values) / len(values) for task, values in by_task.items()}
+
+    left, right = rates(first), rates(second)
+    shared = sorted(set(left) & set(right))
+    wins = sum(right[task] > left[task] for task in shared)
+    losses = sum(right[task] < left[task] for task in shared)
+    return {
+        "baseline": dict(zip(("model", "architecture", "retrieval", "retrieval_limit"), first_key)),
+        "candidate": dict(
+            zip(("model", "architecture", "retrieval", "retrieval_limit"), second_key)
+        ),
+        "matched_tasks": len(shared),
+        "candidate_better": wins,
+        "candidate_worse": losses,
+        "ties": len(shared) - wins - losses,
+        "sign_test_p_value": sign_test_p_value(wins, losses),
+        "unmatched_tasks": sorted(set(left) ^ set(right)),
+    }
+
+
 def run_experiment_sync(
-    manifest_path: str | Path, dataset_path: str | Path, output_path: str | Path
+    manifest_path: str | Path,
+    dataset_path: str | Path,
+    output_path: str | Path,
+    *,
+    authorize_live_provider: bool = False,
 ) -> dict[str, object]:
-    return asyncio.run(run_experiment(manifest_path, dataset_path, output_path))
+    return asyncio.run(
+        run_experiment(
+            manifest_path,
+            dataset_path,
+            output_path,
+            authorize_live_provider=authorize_live_provider,
+        )
+    )
