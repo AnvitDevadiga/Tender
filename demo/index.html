@@ -4,8 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
-  <title>Tender — verify AI-generated code</title>
-  <meta name="description" content="Tender evaluates coding-agent patches against independent tests in fresh, pinned, isolated workspaces, and records hash-sealed evidence of what actually passed.">
+  <title>Tender — Test AI-written code. See what actually passes.</title>
+  <meta name="description" content="Test AI-written code. See what actually passes. Tender evaluates coding-agent patches against independent tests in fresh, pinned, isolated workspaces and records inspectable evidence.">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Tender">
+  <meta property="og:title" content="Tender">
+  <meta property="og:description" content="Test AI-written code. See what actually passes.">
+  <meta property="og:url" content="https://anvitdevadiga.github.io/Tender/">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <script src="dashboard/theme.js"></script>
   <link rel="stylesheet" href="dashboard/styles.css">
@@ -16,7 +21,7 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="site-header-inner">
-      <a class="wordmark" href="#top" aria-label="Tender, back to top">tender<span>.</span></a>
+      <a class="wordmark" href="#top" aria-label="Tender, back to top">Tender</a>
       <nav class="site-nav" id="site-nav" aria-label="Sections">
         <a href="#workflow">Workflow</a>
         <a href="#results">Results</a>
@@ -260,11 +265,15 @@ python scripts/record_replay.py --check    # the replay rebuilds byte for byte</
 
   <footer class="site-footer">
     <div class="site-footer-inner">
-      <span class="wordmark">tender<span>.</span></span>
-      <span>Independent verification for AI-generated code. Research prototype built by Anvit.</span>
-      <span class="grow"></span>
-      <a href="replay/">Dashboard replay</a>
-      <a href="https://github.com/AnvitDevadiga/Tender" target="_blank" rel="noreferrer">GitHub</a>
+      <div class="footer-brand">
+        <span class="wordmark">Tender</span>
+        <p class="footer-tagline">Test AI-written code.<br>See what actually passes.</p>
+        <p class="footer-credit">Built by Anvit Devadiga.</p>
+      </div>
+      <nav class="footer-links" aria-label="Footer">
+        <a href="replay/">Dashboard replay</a>
+        <a href="https://github.com/AnvitDevadiga/Tender" target="_blank" rel="noreferrer">GitHub</a>
+      </nav>
     </div>
   </footer>
 </body>

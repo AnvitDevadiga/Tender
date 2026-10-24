@@ -471,10 +471,6 @@ pre {
   white-space: nowrap;
 }
 
-.wordmark span {
-  color: var(--text-3);
-}
-
 .wordmark small {
   margin-left: var(--s2);
   color: var(--text-3);

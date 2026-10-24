@@ -339,7 +339,7 @@ function renderShell() {
     <div class="app" id="app">
       <header class="topbar">
         <div class="topbar-inner">
-          <a class="wordmark" href="#/runs" aria-label="Tender runs">tender<span>.</span><small>${
+          <a class="wordmark" href="#/runs" aria-label="Tender runs">Tender<small>${
             REPLAY_MODE ? "replay" : "local"
           }</small></a>
           <nav class="nav" aria-label="Views">

@@ -1,183 +1,133 @@
-<div align="center">
-  <img src="assets/tender-wordmark-transparent.png" width="320" alt="tender.">
-  <p><strong>Verify AI-generated code before you trust it.</strong></p>
-  <p><a href="https://anvitdevadiga.github.io/Tender/">Live demo</a> · <a href="https://anvitdevadiga.github.io/Tender/replay/">Recorded replay</a> · <a href="docs/PATCH_VERIFICATION.md">Verify a patch</a> · <a href="docs/SECURITY.md">Security</a></p>
-</div>
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/tender-logo-dark.svg">
+    <img src="assets/tender-logo-light.svg" width="150" alt="Tender">
+  </picture>
+</p>
 
-# Tender
+**Test AI-written code. See what actually passes.**
 
-![Tender landing page: a recorded, Docker-verified patch report beside the product summary](assets/tender-landing.jpg)
+Tender evaluates coding-agent patches against independent tests. Each check runs in a fresh, isolated workspace built from a pinned commit, with required tests the patch cannot change. Every run leaves an inspectable report and a hash-sealed evidence bundle.
 
-Tender independently verifies code changes produced by coding agents, or by anyone else. You give it a local repository, a pinned base commit, a patch, and acceptance criteria written before the patch ran. It applies the patch in fresh, isolated workspaces, runs your target and regression checks, and writes a report plus a hash-sealed evidence bundle of what happened.
+[Live demo](https://anvitdevadiga.github.io/Tender/) · [Recorded replay](https://anvitdevadiga.github.io/Tender/replay/) · [Patch verification](docs/PATCH_VERIFICATION.md) · [Security](docs/SECURITY.md)
 
-It can also run its own bounded agent loop against pinned benchmark tasks and record every step, so you can compare models and configurations on evidence rather than claims.
+## Live demo
+
+**https://anvitdevadiga.github.io/Tender/**
+
+![Tender landing page with a recorded, Docker-verified patch report](assets/tender-landing.jpg)
+
+The site is static and read-only. It shows recorded runs and reports, and nothing executes there. The evaluation engine runs locally.
 
 ## What Tender does
 
-- **Verifies a patch** (`tender verify-patch`): validation, baseline, target checks, regression checks, integrity enforcement, report, evidence.
-- **Runs an agent on a task** (API + worker, or the benchmark runner): plan, edit through authorized tools, test, verify in a pristine workspace, record.
-- **Keeps evidence**: every command, exit code, output tail, digest, stage duration, and event, with `recorded`, `derived`, and `unknown` kept distinct.
-- **Shows it**: a local dashboard for runs and reports; a read-only replay of recorded data on GitHub Pages.
+- **Pinned repository verification.** It verifies against an exact base commit, materialized from Git objects, and never trusts the repository's own Git configuration or hooks.
+- **Isolated patch execution.** Setup and test commands run in Docker with no network, all capabilities dropped, a read-only root, and resource limits.
+- **Independent checks.** Baseline, target, and regression checks each get a fresh workspace. The evaluator fixes the required tests before the patch runs, and each one must appear as passed in the JUnit report.
+- **Evidence reports.** Each run writes `report.json`, a Markdown summary, and an evidence bundle with a SHA-256 manifest of commands, exit codes, output, and digests.
+- **Recorded evaluation inspection.** A local dashboard and a public replay show runs, reports, diffs, and timelines. Each value is labelled Recorded, Derived, Unknown, or Verified.
 
-## Why independent verification matters
+## How it works
 
-An agent's statement that a change works is not evidence, and neither is a test run inside the agent's own workspace. That workspace can contain leftovers from earlier attempts, weakened tests, or a `conftest.py` that turns every failure into a pass. Tender judges a patch only where the patch cannot reach the judge:
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/tender-workflow-dark.svg">
+  <img src="assets/tender-workflow-light.svg" alt="Task or patch, then pinned repository, then isolated execution, then independent checks, then evidence report">
+</picture>
 
-- each check runs in a new workspace built from Git objects at the exact base commit;
-- test files and test-runner configuration are reset to the base commit before checks run;
-- hidden evaluator tests are added only after the patch is applied and never shown to the candidate;
-- patches that touch protected paths, or add modules that shadow the test tooling, are rejected before anything runs;
-- named tests must appear as passed in a JUnit report, so exiting with status 0 is not enough.
-
-## Core capabilities
-
-| Area | What exists |
-| --- | --- |
-| Repository boundary | Never runs Git against untrusted `.git` metadata; sanitized copies, no hooks, no helpers; ignored files never copied |
-| Commit identity | Requested and executed commits recorded; mismatches rejected before any provider call |
-| Pristine verification | Fresh workspace per check; pre-patch fingerprint recorded; directories removed afterwards |
-| Tool authorization | Allowlist enforced at dispatch; refusals recorded; `run_command` never implicit |
-| Outcomes | Separate target, regression, integrity, environment, provider, timeout, policy, overall |
-| Reliability | Lease-fenced events, artifacts, and results; cancellable deadlines; whole-database metrics |
-| Evidence | Per-file SHA-256 manifests; source vs derived; sanitized; verifiable (`tender evidence verify`) |
-| Experiments | Seeded/counterbalanced trials, exclusions, quota-aware stopping, live-provider budgets, Wilson intervals, matched comparisons |
-| Interface | Monochrome dashboard and replay: runs, inspector, diff viewer, compare, reports, keyboard navigation |
-
-## Architecture
-
-```mermaid
-flowchart LR
-  Source[(Your repository<br/>read-only)] -->|.git bytes copied, sanitized| Snapshot[TrustedRepository]
-  Snapshot -->|materialize at commit| Agent[Agent workspace]
-  Snapshot -->|materialize per check| Verifier[Fresh verifier workspaces]
-  Patch[Patch or agent edits] --> Verifier
-  Criteria[Criteria + hidden tests] --> Verifier
-  Verifier --> Sandbox{{Docker sandbox}}
-  Sandbox --> Report[report.json / report.md]
-  Report --> Evidence[(evidence/ manifest)]
-  API[FastAPI] --> Store[(SQLite runs + events)]
-  Worker[Lease-based worker] --> Store
-  Dashboard[Dashboard / replay] --> API
-```
-
-Details: [Architecture](docs/ARCHITECTURE.md) · [Agent workflow](docs/AGENT_WORKFLOW.md) · [Evaluation contract](docs/evaluation-contract.md).
+The patch, the agent, and the repository's Git metadata are all treated as untrusted. Test files and test-runner configuration are restored from the base commit before checks run. Hidden evaluator tests are added only after the patch is applied. Details are in [Architecture](docs/ARCHITECTURE.md) and the [Evaluation contract](docs/evaluation-contract.md).
 
 ## Quick start
 
-Requirements: Python 3.12+, Git. Docker for untrusted code. No model API key is needed for patch verification or the test suite.
+Requirements: Python 3.12+, Git, and Docker. No model API key is needed.
 
 ```bash
 git clone https://github.com/AnvitDevadiga/Tender.git
 cd Tender
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
-python scripts/prepare_fixtures.py      # deterministic benchmark fixtures
-pytest -q                               # offline test suite (Docker tests skip without a daemon)
-
-docker build -f Dockerfile.sandbox -t tender-sandbox:local .   # sandbox image with pytest
-python scripts/run_patch_demo.py        # failure-and-repair demo; uses Docker when available
+docker build -f Dockerfile.sandbox -t tender-sandbox:local .
+pytest -q
 ```
 
-Start the API and dashboard:
+To open the local dashboard with the bundled demo reports:
 
 ```bash
 TENDER_REPORT_ROOT=demo/data/patch-demo uvicorn tender.api:app
-open http://127.0.0.1:8000/dashboard/
+# then open http://127.0.0.1:8000/dashboard/
 ```
 
-## Verify a local patch
+## Verify a patch
+
+This uses the example repository and the two candidate patches shipped in `examples/patch-demo`:
 
 ```bash
-git -C ~/code/project diff > fix.patch          # or a patch exported from any agent
+cp -R examples/patch-demo/repo /tmp/stats-demo
+git -C /tmp/stats-demo init -q && git -C /tmp/stats-demo add -A
+git -C /tmp/stats-demo -c user.name=demo -c user.email=demo@example.invalid commit -q -m base
+
 export TENDER_SANDBOX_IMAGE=tender-sandbox:local
-tender verify-patch \
-  --repo ~/code/project --base HEAD \
-  --patch fix.patch --criteria tender-criteria.toml \
-  --out reports/fix-1
-tender report render reports/fix-1/report.json  # Markdown for code review
-tender evidence verify reports/fix-1/evidence   # recompute every hash
+tender verify-patch --repo /tmp/stats-demo --base HEAD \
+  --patch examples/patch-demo/candidate-2.patch \
+  --criteria examples/patch-demo/criteria.toml \
+  --out /tmp/tender-reports/candidate-2
 ```
 
-Exit status: `0` accepted, `1` rejected, `2` not evaluated (error or inconclusive). Criteria format, the meaning of every check, and the trust flags are in [Patch verification](docs/PATCH_VERIFICATION.md). The original repository is never modified; Tender re-checks it after the run and reports whether it changed.
+```text
+ACCEPTED: Accepted: target checks passed in a fresh workspace at <base commit> and regression checks also passed.
+```
 
-## Evaluation methodology
+With `candidate-1.patch` instead, the result is `REJECTED`: the patch fixes the target bug but breaks `test_median_does_not_mutate_input`. Exit status is `0` for accepted, `1` for rejected, and `2` for not evaluated. To read or check a report:
 
-- **Accepted** requires the target checks to pass in a pristine workspace, integrity to pass, and regression checks to pass or be explicitly *not configured*. In that last case the report says regression preservation was not measured.
-- **Rejected** means a check failed or the patch violated policy. **Error** means the environment could not run the checks (for example, no Docker). **Inconclusive** means a time limit was reached. A provider quota error is not a coding failure, and a setup failure is not an incorrect patch.
-- The **baseline** runs the target checks on the unpatched base. If they already pass, the report says they do not show that the patch is needed.
-- Experiments exclude provider and environment failures from solve rates and list them, report Wilson intervals, and compare configurations task by task.
+```bash
+tender report render /tmp/tender-reports/candidate-2/report.json
+tender evidence verify /tmp/tender-reports/candidate-2/evidence
+```
 
-Full rules: [Evaluation contract](docs/evaluation-contract.md).
+To check your own change, pass your repository, a base commit, a unified diff, and a criteria file. The format is in [Patch verification](docs/PATCH_VERIFICATION.md).
 
-## Results and limitations
+## Results
 
-The published experiments are small and are reported with their limits; the landing page reads its numbers directly from these files:
+The published experiments are small and are reported with their limits:
 
-- [Retry ablation](docs/experiments/groq-retry-ablation-3tasks-v1.json): 18 trials over 3 synthetic tasks, all passed on the first attempt. It therefore says nothing about whether retries help, and its "regression" figure only re-ran target assertions on a clean copy ([erratum E6](docs/EVALUATION_ERRATA.md)).
-- [Retrieval-cap A/B](docs/experiments/retrieval-cap-ab-v1.md): 60 planned trials, 49 provider failures, 5 clean matched pairs, no difference. It is not evidence of capability or efficiency.
-- The [patch demo](demo/data/patch-demo/index.json) involves no model. It shows Tender rejecting a plausible patch that breaks an existing test and accepting the corrected one.
+- **Patch demo** (no model): one plausible patch is rejected for a regression, and the corrected patch is accepted. [Reports](demo/data/patch-demo/index.json).
+- **Retry ablation**: 18 trials over 3 synthetic tasks with `openai/gpt-oss-20b` via Groq. All passed on the first attempt, so it says nothing about whether retries help. Regression preservation was not measured ([erratum E6](docs/EVALUATION_ERRATA.md)). [Record](docs/experiments/groq-retry-ablation-3tasks-v1.json).
+- **Retrieval-cap A/B**: 60 planned trials, 49 provider failures, and only 5 clean matched pairs, with no measurable difference. This is not evidence of capability or efficiency. [Write-up](docs/experiments/retrieval-cap-ab-v1.md).
 
-Defects found in earlier versions and their effect on old records are in the dated [evaluation errata](docs/EVALUATION_ERRATA.md). Historical records are unchanged; the tests compare them byte for byte with the audited commit.
+Only one model has been evaluated, so these results support no model comparison.
 
 ## Reproducibility
 
 ```bash
-python scripts/prepare_fixtures.py         # fixture commits have fixed authors and dates
-python scripts/run_patch_demo.py           # regenerate demo reports (timestamps/durations differ)
-python scripts/record_replay.py --check    # replay must rebuild byte-for-byte from committed inputs
-bash scripts/build_demo_site.sh /tmp/site  # the exact static site GitHub Pages serves
+python scripts/prepare_fixtures.py          # deterministic benchmark fixtures
+python scripts/run_patch_demo.py            # regenerate the demo reports
+python scripts/record_replay.py --check     # the replay rebuilds byte for byte
+python scripts/build_site_data.py --check   # site figures match committed records
 ```
 
-**Recorded** values were written by Tender while a run executed. **Derived** values are computed from recorded ones or sanitized for publication. **Unknown** values were never captured and are shown as unknown, never as zero. The public replay was rebuilt from 587 recorded events exported from the original run databases. An earlier version reconstructed events and copied values from another run ([erratum E8](docs/EVALUATION_ERRATA.md)).
+- [Evaluation contract](docs/evaluation-contract.md): what each outcome means and what may be claimed.
+- [Evaluation errata](docs/EVALUATION_ERRATA.md): dated defects and how to read older records.
+- [Benchmarks](docs/BENCHMARKS.md) and [provider trials](docs/PROVIDER_TRIALS.md): task schema, runner, and experiment design.
+- [Current state](docs/CURRENT_STATE.md): what is implemented, verified, and open.
 
-## Security boundaries
+Historical experiment records are never rewritten. The tests compare them byte for byte with the audited commit.
 
-- **Runs on your machine:** Tender itself, including Git plumbing on sanitized metadata copies, patch validation, and report writing. It never runs repository code.
-- **Runs in Docker:** setup, baseline, target, regression, and agent commands, with no network, all capabilities dropped, a read-only root, UID 65532, and CPU, memory, PID, and time limits.
-- **Runs on GitHub Pages:** nothing. The demo renders recorded JSON.
+## Security and limitations
 
-Not guaranteed: the code under test runs in the same process as the test runner, so a patch designed to forge results can still mislead a check. Docker depends on a privileged host daemon. The local backend (`--trust-local-execution`) is not isolation. Evidence is hashed, not signed. Remote repositories and pull-request execution are disabled. The API is a local tool with an optional shared-secret token, not a multi-user service. See [Security](docs/SECURITY.md).
+An accepted result means the configured checks passed in a fresh, isolated workspace at the pinned commit. It does not prove the code is correct or free of defects. It also cannot show more than the tests cover.
 
-## Live demo
+- Code under test runs in the same process as the test runner, so a patch designed to forge results can still mislead a check.
+- Docker depends on a privileged host daemon. The local backend (`--trust-local-execution`) provides no isolation.
+- Evidence bundles are hashed, not signed.
+- Remote repositories and pull-request execution are disabled. The API is a local tool, not a multi-user service.
 
-The [GitHub Pages site](https://anvitdevadiga.github.io/Tender/) is a static, read-only view of recorded data. The evaluation engine itself only runs locally.
+See [Security](docs/SECURITY.md) for the threat model and controls.
 
-| Part | What it is | What it is not |
-| --- | --- | --- |
-| [Landing page](https://anvitdevadiga.github.io/Tender/) | A recorded report preview, the workflow, the failure-and-repair demo, and charts drawn from `demo/data/site-summary.json`, where each figure names its source file. | Not a live service; nothing executes. |
-| [Recorded replay](https://anvitdevadiga.github.io/Tender/replay/) | The real dashboard bundle over 19 recorded runs and 2 patch reports, served from a static snapshot. Actions that would change state are refused. | Not new evaluations. |
-| Local engine | `tender verify-patch`, the agent workflow, the API and dashboard, and Docker execution. | Not hosted anywhere. |
+## License
 
-Values on both pages are labelled **Recorded** (written while a run executed), **Derived** (computed from recorded values), **Unknown** (never captured), or **Verified** (re-checked in a fresh workspace at the pinned commit). The light theme is the default; a dark theme is available from the header and is remembered.
+License: [MIT](LICENSE).
 
-### Model comparison scope
+The benchmark fixture repository in `benchmarks/fixtures/forgecalc` keeps its own MIT notice.
 
-Published Tender experiments evaluated one model: `openai/gpt-oss-20b` (published by OpenAI), served through Groq. The site lists it once per experiment, because the two experiments used different tasks and are not comparable. It does not imply results for any other model. The comparison table and dashboard model filter pick up new configurations as they are recorded.
+## Credits
 
-## Documentation
-
-| Document | Contents |
-| --- | --- |
-| [Patch verification](docs/PATCH_VERIFICATION.md) | Criteria reference, checks, reports, trust flags |
-| [Architecture](docs/ARCHITECTURE.md) | Components, data flow, trust boundaries |
-| [Evaluation contract](docs/evaluation-contract.md) | What each outcome means and what may be claimed |
-| [Evaluation errata](docs/EVALUATION_ERRATA.md) | Dated defects and how to read old records |
-| [Security](docs/SECURITY.md) | Threat model, controls, known limitations |
-| [Deployment](docs/DEPLOYMENT.md) | Prerequisites, environment variables, Docker, worker |
-| [Benchmarks](docs/BENCHMARKS.md) | Task schema, runner, experiment design |
-| [Current state](docs/CURRENT_STATE.md) | What is implemented, verified, and open |
-
-## Checks
-
-```bash
-ruff check src tests scripts && ruff format --check src tests scripts
-pytest -q                                      # includes Docker tests when a daemon and image exist
-node --test tests/js/diff.test.mjs             # diff parser and renderer
-python scripts/build_site_data.py --check      # landing-page figures match committed records
-python scripts/record_replay.py --check        # replay rebuilds byte for byte
-bash scripts/build_demo_site.sh /tmp/site      # the static site exactly as Pages serves it
-```
-
-Optional real-browser QA (Playwright, not a project dependency) covers the landing page, dashboard, replay, and inspector at 320 to 1440 px in both themes. It also checks 200% zoom, keyboard focus handling, and reduced motion. Run it with `python scripts/qa_browser.py <site-url> <screenshot-dir>`; the script header has setup notes.
-
-Tender has no license file yet, so default copyright applies until one is chosen.
+Built by Anvit Devadiga.

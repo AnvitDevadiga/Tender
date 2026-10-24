@@ -7,6 +7,8 @@ name = "tender"
 version = "0.2.0"
 description = "Independent, evidence-backed verification for AI-generated code changes."
 readme = "README.md"
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.115,<1",
@@ -30,7 +32,7 @@ packages = ["src/tender"]
 "assets/favicon.svg" = "tender/web/assets/favicon.svg"
 
 [tool.hatch.build.targets.sdist]
-include = ["src/tender", "dashboard", "assets/favicon.svg", "README.md", "pyproject.toml"]
+include = ["src/tender", "dashboard", "assets/favicon.svg", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
