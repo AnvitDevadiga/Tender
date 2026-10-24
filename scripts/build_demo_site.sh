@@ -10,7 +10,7 @@
 # Layout (site root, prefix-agnostic — Pages hosts this at /Tender/):
 #   index.html, styles.css, demo.js     landing page copied from demo/
 #   replay/                             read-only dashboard replay (replay.js + records.json)
-#   dashboard/app.js, lib.js, styles.css  the live dashboard bundle, single source of truth
+#   dashboard/app.js, lib.js, theme.js, styles.css  the live dashboard bundle
 #   data/                               recorded demo inputs (patch-demo reports, replay inputs)
 #   docs/experiments/*.json             published experiment records read by the landing page
 set -euo pipefail
@@ -23,7 +23,7 @@ cp -R demo/. "$target/"
 
 # The landing page and the replay reuse the live dashboard bundle; keep exactly one copy.
 mkdir -p "$target/dashboard"
-cp dashboard/app.js dashboard/lib.js dashboard/styles.css "$target/dashboard/"
+cp dashboard/app.js dashboard/lib.js dashboard/theme.js dashboard/styles.css "$target/dashboard/"
 
 mkdir -p "$target/docs/experiments"
 cp docs/experiments/groq-retry-ablation-3tasks-v1.json "$target/docs/experiments/"

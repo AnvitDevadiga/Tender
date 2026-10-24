@@ -8,6 +8,7 @@ Pages, so these tests also build the static site and check every local link.
 import json
 import re
 import subprocess
+import sys
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.parse import urlparse
@@ -107,15 +108,60 @@ def test_replay_snapshot_stays_clean_and_complete() -> None:
 
 def test_landing_page_prioritizes_the_demo_and_has_a_mobile_menu() -> None:
     page = (DEMO_ROOT / "index.html").read_text(encoding="utf-8")
-    for section in ("how", "evidence", "results", "reproduce", "limits", "install"):
+    for section in ("workflow", "results", "models", "use", "reproduce", "limits"):
         assert f'id="{section}"' in page
-        if section != "reproduce":
-            assert f'href="#{section}"' in page
-    hero = page[page.index('id="top"') : page.index('id="how"')]
+        assert f'href="#{section}"' in page
+    hero = page[page.index('id="top"') : page.index('id="what"')]
+    assert "Verify AI-generated code." in hero
     assert 'href="replay/' in hero  # the recorded demo is one click from the first screen
     assert "data-menu-toggle" in page and 'aria-controls="site-nav"' in page
     assert 'type="module" src="demo.js"' in page
     assert "<style" not in page and "onclick" not in page
+
+
+def test_every_page_applies_the_stored_theme_before_paint_and_defaults_to_light() -> None:
+    pages = {
+        ROOT / "dashboard" / "index.html": 'src="theme.js"',
+        DEMO_ROOT / "replay" / "index.html": 'src="../dashboard/theme.js"',
+        DEMO_ROOT / "index.html": 'src="dashboard/theme.js"',
+    }
+    for page, tag in pages.items():
+        text = page.read_text(encoding="utf-8")
+        assert tag in text, page
+        assert text.index(tag) < text.index("stylesheet"), f"{page}: theme must load before CSS"
+    styles = (ROOT / "dashboard" / "styles.css").read_text(encoding="utf-8")
+    assert "prefers-color-scheme" not in styles  # light unless the visitor chooses dark
+    assert ':root[data-theme="dark"]' in styles
+    boot = (ROOT / "dashboard" / "theme.js").read_text(encoding="utf-8")
+    assert '"tender.theme"' in boot and "matchMedia" not in boot
+
+
+def test_site_summary_is_fresh_and_matches_its_sources() -> None:
+    completed = subprocess.run(
+        [sys.executable, "scripts/build_site_data.py", "--check"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert completed.returncode == 0, completed.stderr
+    summary = json.loads((DEMO_ROOT / "data" / "site-summary.json").read_text())
+    outcomes = {item["id"]: item for item in summary["outcomes"]}
+    retrieval = json.loads((ROOT / "docs/experiments/retrieval-cap-ab-v1.json").read_text())
+    assert outcomes["retrieval-cap"]["counts"]["provider_error"] == sum(
+        run["failure_category"] == "provider_error" for run in retrieval["runs"]
+    )
+    for item in summary["outcomes"]:
+        assert sum(item["counts"].values()) == item["trials"]  # nothing dropped or invented
+        assert (ROOT / item["source"]).is_file()
+    assert (
+        len({row["model"] for row in summary["models"]["rows"]}) == 1
+    )  # one model, shown honestly
+    assert all(
+        pair["cap_12"]["seconds"] and pair["cap_6"]["seconds"]
+        for pair in summary["paired_latency"]["pairs"]
+    )
+    assert summary["hero_report"]["overall"] == "accepted"
+    assert summary["hero_report"]["coverage_provenance"] == "base_commit_collection"
 
 
 def test_readme_links_use_the_case_sensitive_pages_path() -> None:

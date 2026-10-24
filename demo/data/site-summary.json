@@ -1,0 +1,508 @@
+{
+ "schema": "tender.site-summary.v1",
+ "generated_by": "scripts/build_site_data.py",
+ "categories": [
+  {
+   "key": "verified_pass",
+   "label": "Verified pass"
+  },
+  {
+   "key": "target_failure",
+   "label": "Target failure"
+  },
+  {
+   "key": "regression_failure",
+   "label": "Regression failure"
+  },
+  {
+   "key": "test_failure_unseparated",
+   "label": "Test failure, unseparated"
+  },
+  {
+   "key": "provider_error",
+   "label": "Provider error"
+  },
+  {
+   "key": "environment_error",
+   "label": "Environment error"
+  },
+  {
+   "key": "timeout",
+   "label": "Timeout"
+  },
+  {
+   "key": "not_evaluated",
+   "label": "Not evaluated"
+  }
+ ],
+ "hero_report": {
+  "source": "demo/data/patch-demo/candidate-2/report.json",
+  "provenance": "verified",
+  "report_id": "8fbe39ba-3fae-418f-a3bc-3d24e2160fc6",
+  "task": "median() is wrong for even-length input",
+  "repository": "stats-demo",
+  "base_commit": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+  "patch_file": "candidate-2.patch",
+  "patch_sha256": "ac0dd220916598274936b2d1f58297c582cd02e439c392ac8413090b3505cd1f",
+  "sandbox": "docker",
+  "overall": "accepted",
+  "independently_verified": true,
+  "coverage_provenance": "base_commit_collection",
+  "tests": [
+   {
+    "group": "target",
+    "id": "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+    "outcome": "passed"
+   },
+   {
+    "group": "target",
+    "id": "tests/test_median_target.py::test_median_even_length_floats",
+    "outcome": "passed"
+   },
+   {
+    "group": "regression",
+    "id": "tests/test_core.py::test_mean",
+    "outcome": "passed"
+   },
+   {
+    "group": "regression",
+    "id": "tests/test_core.py::test_mean_rejects_empty_input",
+    "outcome": "passed"
+   },
+   {
+    "group": "regression",
+    "id": "tests/test_core.py::test_median_does_not_mutate_input",
+    "outcome": "passed"
+   },
+   {
+    "group": "regression",
+    "id": "tests/test_core.py::test_median_odd_length",
+    "outcome": "passed"
+   },
+   {
+    "group": "regression",
+    "id": "tests/test_core.py::test_median_rejects_empty_input",
+    "outcome": "passed"
+   }
+  ],
+  "evidence_manifest_sha256": "804ebbf381edbc44a41c3b81b490cbdb25822320b55bda8f85b0f037de05e6a9"
+ },
+ "outcomes": [
+  {
+   "id": "patch-demo",
+   "label": "Patch verification demo",
+   "detail": "2 candidate patches, one bug, no model",
+   "trials": 2,
+   "counts": {
+    "verified_pass": 1,
+    "target_failure": 0,
+    "regression_failure": 1,
+    "test_failure_unseparated": 0,
+    "provider_error": 0,
+    "environment_error": 0,
+    "timeout": 0,
+    "not_evaluated": 0
+   },
+   "provenance": "verified",
+   "note": "Current outcome model: target and regression checks recorded separately.",
+   "source": "demo/data/patch-demo/index.json",
+   "pointer": "/reports/*/file → report.json /outcome"
+  },
+  {
+   "id": "retry-ablation",
+   "label": "Retry ablation",
+   "detail": "18 trials, 3 tasks",
+   "trials": 18,
+   "counts": {
+    "verified_pass": 18,
+    "target_failure": 0,
+    "regression_failure": 0,
+    "test_failure_unseparated": 0,
+    "provider_error": 0,
+    "environment_error": 0,
+    "timeout": 0,
+    "not_evaluated": 0
+   },
+   "provenance": "derived",
+   "note": "Legacy record: a pass means the independent target check passed on a clean copy; regression preservation was not measured (erratum E6).",
+   "source": "docs/experiments/groq-retry-ablation-3tasks-v1.json",
+   "pointer": "/runs/*/passed, /runs/*/failure_category"
+  },
+  {
+   "id": "retrieval-cap",
+   "label": "Retrieval cap A/B",
+   "detail": "60 trials, 30 tasks",
+   "trials": 60,
+   "counts": {
+    "verified_pass": 6,
+    "target_failure": 0,
+    "regression_failure": 0,
+    "test_failure_unseparated": 4,
+    "provider_error": 49,
+    "environment_error": 0,
+    "timeout": 0,
+    "not_evaluated": 1
+   },
+   "provenance": "derived",
+   "note": "Legacy record. Test failures were not split into target and regression; one planning failure stopped before verification.",
+   "source": "docs/experiments/retrieval-cap-ab-v1.json",
+   "pointer": "/runs/*/passed, /runs/*/failure_category"
+  }
+ ],
+ "durations": {
+  "label": "Recorded run duration per task",
+  "experiment": "groq-retry-ablation-3tasks-v1",
+  "model": "groq/openai/gpt-oss-20b",
+  "provenance": "recorded",
+  "source": "docs/experiments/groq-retry-ablation-3tasks-v1.json",
+  "pointer": "/runs/*/latency_ms",
+  "note": "Same model, workflow, and fixture repository for all trials. Every trial passed on its first attempt, so retry budgets did not change behaviour.",
+  "tasks": [
+   {
+    "task_id": "forgecalc-001",
+    "title": "Percentage should interpret percent units",
+    "median_seconds": 38.62,
+    "runs": [
+     {
+      "run_id": "b8f51be4-2ecf-4039-a92a-ad887dd59c40",
+      "seconds": 3.16,
+      "retry_budget": 0,
+      "attempts": 1,
+      "tokens": 6173,
+      "estimated_cost_usd": 0.00058425
+     },
+     {
+      "run_id": "9bd566c1-555e-4a1b-8d10-dc1985c8fa18",
+      "seconds": 30.77,
+      "retry_budget": 2,
+      "attempts": 1,
+      "tokens": 6173,
+      "estimated_cost_usd": 0.00058425
+     },
+     {
+      "run_id": "f56be536-324a-4286-b845-5f138ad5f571",
+      "seconds": 31.84,
+      "retry_budget": 0,
+      "attempts": 1,
+      "tokens": 6173,
+      "estimated_cost_usd": 0.00058425
+     },
+     {
+      "run_id": "68ad2df7-04f0-4766-a47a-2e83973dbee1",
+      "seconds": 45.41,
+      "retry_budget": 1,
+      "attempts": 1,
+      "tokens": 6173,
+      "estimated_cost_usd": 0.00058425
+     },
+     {
+      "run_id": "fa86219d-b866-4b98-bfde-20a520fdd979",
+      "seconds": 46.07,
+      "retry_budget": 2,
+      "attempts": 1,
+      "tokens": 6173,
+      "estimated_cost_usd": 0.00058425
+     },
+     {
+      "run_id": "a224afb4-a9a1-4400-982e-16d09cb79918",
+      "seconds": 46.21,
+      "retry_budget": 1,
+      "attempts": 1,
+      "tokens": 6173,
+      "estimated_cost_usd": 0.00058425
+     }
+    ]
+   },
+   {
+    "task_id": "forgecalc-002",
+    "title": "Clamp must support lower and upper bounds",
+    "median_seconds": 98.81,
+    "runs": [
+     {
+      "run_id": "76d93cf4-20fc-427c-be76-870ca12f5f75",
+      "seconds": 23.9,
+      "retry_budget": 2,
+      "attempts": 1,
+      "tokens": 9092,
+      "estimated_cost_usd": 0.00090735
+     },
+     {
+      "run_id": "74790817-99fa-4a45-8914-83244b004c76",
+      "seconds": 60.45,
+      "retry_budget": 1,
+      "attempts": 1,
+      "tokens": 9146,
+      "estimated_cost_usd": 0.00092355
+     },
+     {
+      "run_id": "f76c092c-4c55-40b7-ae45-3993ccdb3a2c",
+      "seconds": 94.9,
+      "retry_budget": 2,
+      "attempts": 1,
+      "tokens": 14134,
+      "estimated_cost_usd": 0.0013188
+     },
+     {
+      "run_id": "d70b2e35-293c-4f60-9075-a06ed6ba0080",
+      "seconds": 102.73,
+      "retry_budget": 0,
+      "attempts": 1,
+      "tokens": 13722,
+      "estimated_cost_usd": 0.0012933
+     },
+     {
+      "run_id": "0226f4f4-1b11-44e6-8f69-01e1e774b03f",
+      "seconds": 106.67,
+      "retry_budget": 0,
+      "attempts": 1,
+      "tokens": 16813,
+      "estimated_cost_usd": 0.00154155
+     },
+     {
+      "run_id": "70c252c2-714a-4a95-b971-fe2ebc3d1eff",
+      "seconds": 112.25,
+      "retry_budget": 1,
+      "attempts": 1,
+      "tokens": 16829,
+      "estimated_cost_usd": 0.00154635
+     }
+    ]
+   },
+   {
+    "task_id": "forgecalc-003",
+    "title": "Mean should calculate the arithmetic average",
+    "median_seconds": 40.41,
+    "runs": [
+     {
+      "run_id": "97adbe0e-4b2d-4f54-a8f8-ad7ed8488f91",
+      "seconds": 35.36,
+      "retry_budget": 0,
+      "attempts": 1,
+      "tokens": 6296,
+      "estimated_cost_usd": 0.000660075
+     },
+     {
+      "run_id": "b8b0d1c0-df64-4d3d-93d9-e1ccfac73ab6",
+      "seconds": 36.39,
+      "retry_budget": 2,
+      "attempts": 1,
+      "tokens": 6296,
+      "estimated_cost_usd": 0.000660075
+     },
+     {
+      "run_id": "8df61b43-1d0c-40a6-9a9b-32c10f6a6260",
+      "seconds": 39.36,
+      "retry_budget": 2,
+      "attempts": 1,
+      "tokens": 6296,
+      "estimated_cost_usd": 0.000660075
+     },
+     {
+      "run_id": "8893b090-411d-428c-ae06-2a67c6b72443",
+      "seconds": 41.45,
+      "retry_budget": 1,
+      "attempts": 1,
+      "tokens": 6296,
+      "estimated_cost_usd": 0.000660075
+     },
+     {
+      "run_id": "7430d40f-5ff8-4c5c-ac08-9388aad637a9",
+      "seconds": 44.1,
+      "retry_budget": 0,
+      "attempts": 1,
+      "tokens": 6522,
+      "estimated_cost_usd": 0.000691425
+     },
+     {
+      "run_id": "e719f4ab-73dd-44ac-bef7-69b9ee05f304",
+      "seconds": 46.16,
+      "retry_budget": 1,
+      "attempts": 1,
+      "tokens": 6296,
+      "estimated_cost_usd": 0.000660075
+     }
+    ]
+   }
+  ]
+ },
+ "paired_latency": {
+  "label": "Matched pairs without provider errors",
+  "experiment": "retrieval-cap-ab-v1",
+  "model": "groq/openai/gpt-oss-20b",
+  "provenance": "recorded",
+  "source": "docs/experiments/retrieval-cap-ab-v1.json",
+  "pointer": "/runs/*/latency_ms where both caps lack provider_error",
+  "planned_pairs": 30,
+  "pairs": [
+   {
+    "task_id": "tender-utils-001",
+    "cap_12": {
+     "seconds": 3.9,
+     "passed": true,
+     "run_id": "2eebf3db-2d22-47f3-b099-aff396deb8f0"
+    },
+    "cap_6": {
+     "seconds": 19.9,
+     "passed": true,
+     "run_id": "2c19ffa5-ad39-44a6-a975-b94cea1c4bdd"
+    }
+   },
+   {
+    "task_id": "tender-utils-002",
+    "cap_12": {
+     "seconds": 42.8,
+     "passed": true,
+     "run_id": "6c25f488-e407-42e6-ac99-bbd42bb96d17"
+    },
+    "cap_6": {
+     "seconds": 45.4,
+     "passed": false,
+     "run_id": "f3db2bca-270f-464d-bd92-ff835aa6be7c"
+    }
+   },
+   {
+    "task_id": "tender-utils-003",
+    "cap_12": {
+     "seconds": 73.6,
+     "passed": false,
+     "run_id": "4a8d8990-31e9-4e2c-9080-b7276f67f725"
+    },
+    "cap_6": {
+     "seconds": 24.7,
+     "passed": true,
+     "run_id": "98edfcd8-8dca-42ff-af6c-b983bb20718f"
+    }
+   },
+   {
+    "task_id": "tender-utils-005",
+    "cap_12": {
+     "seconds": 15.9,
+     "passed": false,
+     "run_id": "6fd3a1ea-dc9b-4331-9fae-e37eb14f243b"
+    },
+    "cap_6": {
+     "seconds": 47.8,
+     "passed": false,
+     "run_id": "02d47d3e-41f8-4d55-95f9-c20485decf65"
+    }
+   },
+   {
+    "task_id": "tender-utils-006",
+    "cap_12": {
+     "seconds": 33.4,
+     "passed": true,
+     "run_id": "5f4fb9f8-af3e-4179-8c88-d2c5dc329b0d"
+    },
+    "cap_6": {
+     "seconds": 50.7,
+     "passed": true,
+     "run_id": "6262478e-8992-4eaf-9756-0dffecce3791"
+    }
+   }
+  ],
+  "note": "Only 5 of 30 planned pairs completed without provider errors. This is too few to support any efficiency or capability claim."
+ },
+ "timeline": {
+  "run_id": "2a5ce4e0-ca02-4f85-9b7e-e541035b51e5",
+  "title": "Percentage should interpret percent units",
+  "model": "groq/openai/gpt-oss-20b",
+  "sandbox": "docker",
+  "provenance": "recorded",
+  "note": "State-change timestamps are recorded; stage durations are derived from them.",
+  "source": "demo/data/replay-inputs/legacy-runs.v1.json",
+  "pointer": "/runs/[id=2a5ce4e0-ca02-4f85-9b7e-e541035b51e5]/events[name=workflow.state_changed]",
+  "total_seconds": 8.137,
+  "stages": [
+   {
+    "state": "task_received",
+    "start_seconds": 0.191,
+    "end_seconds": 0.192
+   },
+   {
+    "state": "repository_setup",
+    "start_seconds": 0.192,
+    "end_seconds": 0.194
+   },
+   {
+    "state": "repository_analysis",
+    "start_seconds": 0.194,
+    "end_seconds": 0.195
+   },
+   {
+    "state": "context_retrieval",
+    "start_seconds": 0.195,
+    "end_seconds": 0.198
+   },
+   {
+    "state": "plan",
+    "start_seconds": 0.198,
+    "end_seconds": 0.951
+   },
+   {
+    "state": "implement",
+    "start_seconds": 0.951,
+    "end_seconds": 7.591
+   },
+   {
+    "state": "test",
+    "start_seconds": 7.591,
+    "end_seconds": 7.909
+   },
+   {
+    "state": "static_analysis",
+    "start_seconds": 7.909,
+    "end_seconds": 7.912
+   },
+   {
+    "state": "diff_review",
+    "start_seconds": 7.912,
+    "end_seconds": 7.914
+   },
+   {
+    "state": "task_verification",
+    "start_seconds": 7.914,
+    "end_seconds": 8.105
+   },
+   {
+    "state": "complete",
+    "start_seconds": 8.105,
+    "end_seconds": 8.137
+   }
+  ]
+ },
+ "models": {
+  "note": "One model has been evaluated in published Tender experiments. Rows are per experiment because the experiments used different tasks and are not comparable.",
+  "rows": [
+   {
+    "model": "openai/gpt-oss-20b",
+    "model_publisher": "openai",
+    "provider": "groq",
+    "experiment": "groq-retry-ablation-3tasks-v1",
+    "unique_tasks": 3,
+    "trials": 18,
+    "passed": 18,
+    "provider_failures": 0,
+    "median_seconds_excluding_provider_failures": 44.8,
+    "estimated_cost_usd": 0.015028,
+    "cost_basis": "Groq GPT-OSS 20B published developer list price snapshot 2026-10-10; estimate only, not provider-reported billing.",
+    "provenance": "derived",
+    "source": "docs/experiments/groq-retry-ablation-3tasks-v1.json"
+   },
+   {
+    "model": "openai/gpt-oss-20b",
+    "model_publisher": "openai",
+    "provider": "groq",
+    "experiment": "retrieval-cap-ab-v1",
+    "unique_tasks": 30,
+    "trials": 60,
+    "passed": 6,
+    "provider_failures": 49,
+    "median_seconds_excluding_provider_failures": 42.8,
+    "estimated_cost_usd": 0.009111,
+    "cost_basis": "Groq GPT-OSS 20B published developer list price snapshot 2026-10-10; estimate only, not provider-reported billing.",
+    "provenance": "derived",
+    "source": "docs/experiments/retrieval-cap-ab-v1.json"
+   }
+  ]
+ }
+}

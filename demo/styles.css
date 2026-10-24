@@ -1,7 +1,6 @@
-/* Public landing page layout. Tokens and components come from dashboard/styles.css. */
+/* Public landing page layout. Tokens and shared components: dashboard/styles.css. */
 
 html {
-  scroll-behavior: smooth;
   scroll-padding-top: 72px;
 }
 
@@ -16,6 +15,19 @@ body {
   margin: 0 auto;
   padding-left: var(--s5);
   padding-right: var(--s5);
+}
+
+code {
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--surface-2);
+  font-size: 0.88em;
+}
+
+pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
 }
 
 /* ----------------------------------------------------------------- header */
@@ -35,24 +47,20 @@ body {
   padding: 0 var(--s5);
   display: flex;
   align-items: center;
-  gap: var(--s4);
-}
-
-.site-header .wordmark {
-  margin-right: auto;
+  gap: var(--s5);
 }
 
 .site-nav {
   display: flex;
-  gap: var(--s1);
+  gap: 2px;
+  margin-right: auto;
 }
 
 .site-nav a {
-  padding: var(--s2) var(--s3);
+  padding: 6px 10px;
   border-radius: var(--radius);
-  color: var(--text-2);
-  font-size: 13.5px;
-  font-weight: 500;
+  color: var(--text-3);
+  font-size: 14px;
   text-decoration: none;
   transition:
     color var(--dur) var(--ease),
@@ -61,13 +69,17 @@ body {
 
 .site-nav a:hover {
   color: var(--text);
-  background: var(--surface);
+  background: var(--surface-2);
 }
 
 .site-nav a[aria-current="true"] {
   color: var(--text);
-  box-shadow: inset 0 -2px 0 var(--text);
-  border-radius: 0;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
 }
 
 .menu-toggle {
@@ -77,34 +89,33 @@ body {
 /* ------------------------------------------------------------------- hero */
 
 .hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+  gap: var(--s7);
+  align-items: start;
   padding-top: var(--s8);
-  padding-bottom: var(--s7);
-}
-
-.eyebrow,
-.kicker {
-  display: block;
-  margin-bottom: var(--s4);
-  color: var(--text-3);
-  font: 500 12px/1.4 var(--font-mono);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  padding-bottom: var(--s8);
 }
 
 .hero h1 {
-  max-width: 18ch;
-  font-size: clamp(34px, 6vw, 60px);
-  font-weight: 500;
-  line-height: 1.05;
+  font-size: clamp(36px, 5.2vw, 56px);
+  font-weight: 600;
+  line-height: 1.04;
   letter-spacing: -0.035em;
 }
 
 .lede {
-  max-width: 62ch;
+  max-width: 34em;
   margin-top: var(--s5);
-  color: var(--text-2);
-  font-size: 17px;
-  line-height: 1.6;
+  color: var(--text);
+  font-size: 19px;
+  line-height: 1.5;
+}
+
+.hero-detail {
+  max-width: 36em;
+  margin-top: var(--s4);
+  color: var(--text-3);
 }
 
 .hero-actions {
@@ -116,7 +127,7 @@ body {
 
 .hero-actions .btn {
   min-height: 40px;
-  padding: 0 var(--s4);
+  padding: 0 var(--s5);
   font-size: 14px;
 }
 
@@ -124,46 +135,94 @@ body {
   max-width: 72ch;
   margin-top: var(--s4);
   color: var(--text-3);
-  font-size: 13px;
-}
-
-.hero-proof {
-  margin-top: var(--s7);
-}
-
-.proof {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-
-.proof > div {
-  padding: var(--s4) var(--s5);
-  min-width: 0;
-}
-
-.proof > div + div {
-  border-left: 1px solid var(--border);
-}
-
-.proof .what {
-  display: block;
-  margin-bottom: var(--s2);
-  color: var(--text-3);
-  font: 500 12px/1.4 var(--font-mono);
-}
-
-.proof p {
-  margin-top: var(--s2);
-  color: var(--text-2);
   font-size: 13.5px;
 }
 
-.proof .mono {
+/* Recorded report preview */
+
+.report-preview {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  font-size: 13.5px;
+}
+
+.report-preview > figcaption {
+  padding: var(--s4);
   color: var(--text-3);
-  font-size: 12px;
+}
+
+.preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  padding: var(--s3) var(--s4);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.preview-head .title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 500;
+}
+
+.preview-facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px var(--s4);
+  margin: 0;
+  padding: var(--s4);
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-facts dt {
+  color: var(--text-3);
+}
+
+.preview-facts dd {
+  margin: 0;
+  min-width: 0;
   overflow-wrap: anywhere;
+}
+
+.preview-tests {
+  margin: 0;
+  padding: var(--s3) var(--s4);
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+  font: 400 12.5px/1.5 var(--font-mono);
+}
+
+.preview-tests li {
+  display: flex;
+  gap: var(--s2);
+  padding: 2px 0;
+  min-width: 0;
+}
+
+.preview-tests .group {
+  flex: none;
+  width: 6.5em;
+  color: var(--text-3);
+  font-family: var(--font-sans);
+}
+
+.preview-tests .id {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.preview-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--s2) var(--s4);
+  padding: var(--s3) var(--s4);
+  color: var(--text-3);
+  font-size: 13px;
 }
 
 /* --------------------------------------------------------------- sections */
@@ -174,71 +233,115 @@ body {
   border-top: 1px solid var(--border);
 }
 
-.section-head {
-  max-width: 72ch;
-  margin-bottom: var(--s6);
+.band > h2 {
+  font-size: clamp(24px, 3vw, 30px);
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
-.section-head h2 {
-  font-size: clamp(24px, 3.4vw, 34px);
-  letter-spacing: -0.025em;
-}
-
-.section-head p {
+.section-lede {
+  max-width: 68ch;
   margin-top: var(--s3);
-  color: var(--text-2);
+  margin-bottom: var(--s6);
+  color: var(--text-3);
+  font-size: 16px;
 }
 
-.pipeline {
+.subhead {
+  margin-top: var(--s2);
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.subtext {
+  max-width: 72ch;
+  margin: var(--s2) 0 var(--s4);
+  color: var(--text-3);
+}
+
+.three-up {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--s6);
+  margin-top: var(--s5);
+}
+
+.three-up h3 {
+  margin-bottom: var(--s2);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.three-up p {
+  color: var(--text-3);
+}
+
+/* ---------------------------------------------------------------- diagram */
+
+.diagram {
+  margin: 0 0 var(--s5);
+}
+
+.diagram svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.diagram .flow-v {
+  display: none;
+  max-width: 320px;
+  margin: 0 auto;
+}
+
+.diagram rect {
+  fill: var(--bg);
+  stroke: var(--text);
+  stroke-width: 1.25;
+}
+
+.diagram rect.emphasis {
+  fill: var(--surface-2);
+}
+
+.diagram line {
+  stroke: var(--text-3);
+  stroke-width: 1.25;
+}
+
+.diagram .arrowhead {
+  fill: var(--text-3);
+}
+
+.diagram text {
+  fill: var(--text);
+  font: 500 15px var(--font-sans);
+  text-anchor: middle;
+}
+
+.steps {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: var(--s5);
   margin: 0;
   padding: 0;
   list-style: none;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-}
-
-.pipeline li {
-  padding: var(--s4);
-  border-right: 1px solid var(--border);
-}
-
-.pipeline li:last-child {
-  border-right: 0;
-}
-
-.pipeline .step {
-  display: block;
-  margin-bottom: var(--s3);
   color: var(--text-3);
-  font: 500 12px/1 var(--font-mono);
-}
-
-.pipeline h3 {
-  font-size: 15px;
-  margin-bottom: var(--s2);
-}
-
-.pipeline p,
-.where p {
-  color: var(--text-2);
-  font-size: 13.5px;
-}
-
-.where {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: var(--s5);
-  margin-top: var(--s6);
-}
-
-.where h3 {
   font-size: 14px;
-  margin-bottom: var(--s2);
+}
+
+.steps strong {
+  display: block;
+  margin-bottom: var(--s1);
+  color: var(--text);
+  font-weight: 600;
 }
 
 /* ------------------------------------------------------------ patch demo */
+
+.demo {
+  margin-bottom: var(--s7);
+}
 
 .demo-switch {
   display: flex;
@@ -256,15 +359,16 @@ body {
 }
 
 .demo-panel {
-  min-width: 0; /* let the diff scroll inside its panel instead of widening the page */
+  min-width: 0;
 }
 
-.demo-panel h3 {
-  font-size: 14px;
+.demo-panel h4 {
   margin: var(--s5) 0 var(--s2);
+  font-size: 14px;
+  font-weight: 600;
 }
 
-.demo-panel h3:first-child {
+.demo-panel h4:first-child {
   margin-top: 0;
 }
 
@@ -272,102 +376,223 @@ body {
   font-size: 13.5px;
 }
 
-.demo-task {
-  padding: var(--s4);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--surface);
-  color: var(--text-2);
-  font-size: 14px;
-}
-
-.demo-task strong {
-  display: block;
-  margin-bottom: var(--s1);
-  color: var(--text);
-  font-weight: 500;
-}
-
 .demo .callout {
   font-size: 13.5px;
 }
 
-/* --------------------------------------------------------------- results */
+/* ------------------------------------------------------------------ charts */
 
-.results {
+.chart-grid {
   display: grid;
-  gap: var(--s5);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--s6);
 }
 
-.experiment {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+.chart-block {
+  min-width: 0;
+  margin-bottom: var(--s7);
 }
 
-.experiment header {
+.chart-head {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: var(--s2) var(--s4);
-  padding: var(--s4) var(--s5);
-  border-bottom: 1px solid var(--border);
+  gap: var(--s2) var(--s3);
+  margin-bottom: var(--s1);
 }
 
-.experiment header h3 {
-  font-size: 15px;
+.chart-head h3 {
+  font-size: 16px;
+  font-weight: 600;
 }
 
-.experiment header .mono {
+.chart-sub {
+  margin-bottom: var(--s3);
   color: var(--text-3);
-  font-size: 12px;
+  font-size: 13.5px;
 }
 
-.experiment .metrics {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+.chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
 }
 
-.experiment .metrics > div {
-  padding: var(--s4) var(--s5);
-  border-right: 1px solid var(--border);
-  min-width: 0;
+.chart text {
+  fill: var(--text-3);
+  font: 400 12px var(--font-sans);
 }
 
-.experiment .metrics > div:last-child {
-  border-right: 0;
-}
-
-.experiment .metrics dt {
-  color: var(--text-3);
-  font-size: 12.5px;
-}
-
-.experiment .metrics dd {
-  margin: var(--s1) 0 0;
-  font-size: 22px;
+.chart .value {
+  fill: var(--text);
   font-weight: 500;
-  letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
 }
 
-.experiment .metrics .foot {
-  display: block;
+.chart .group-label {
+  fill: var(--text);
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.chart .axis,
+.chart .grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.chart .axis {
+  stroke: var(--border-strong);
+}
+
+.chart .mark {
+  fill: var(--chart-1);
+  transition: opacity var(--dur) var(--ease);
+}
+
+.chart .mark.secondary {
+  fill: var(--chart-2);
+}
+
+.chart .mark.hollow {
+  fill: var(--bg);
+  stroke: var(--chart-1);
+  stroke-width: 1.5;
+}
+
+.chart .connector {
+  stroke: var(--chart-3);
+  stroke-width: 2;
+}
+
+.chart .median {
+  stroke: var(--text);
+  stroke-width: 2;
+}
+
+.chart a:focus-visible,
+.chart [tabindex]:focus-visible {
+  outline: none;
+}
+
+.chart a:focus-visible .mark,
+.chart [tabindex]:focus-visible .mark {
+  stroke: var(--text);
+  stroke-width: 3;
+}
+
+.chart a:hover .mark,
+.chart g[tabindex]:hover .mark {
+  opacity: 0.75;
+}
+
+.chart-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  margin-top: var(--s3);
   color: var(--text-3);
+  font-size: 13px;
+}
+
+.chart-meta .source {
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
-.experiment .reading {
-  padding: var(--s4) var(--s5);
-  border-top: 1px solid var(--border);
-  color: var(--text-2);
-  font-size: 14px;
+.chart-note {
+  margin-top: var(--s2);
+  color: var(--text-3);
+  font-size: 13px;
 }
 
-.experiment .reading a {
+.chart-data {
+  margin-top: var(--s2);
+  font-size: 13px;
+}
+
+.chart-data summary {
+  color: var(--text-2);
+  cursor: pointer;
+}
+
+.chart-data .table-wrap {
+  margin-top: var(--s2);
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  margin-bottom: var(--s2);
+  color: var(--text-3);
+  font-size: 13px;
+}
+
+.chart-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-right: 6px;
+  border-radius: 50%;
+  vertical-align: -1px;
+}
+
+.chart-legend .dark::before {
+  background: var(--chart-1);
+}
+
+.chart-legend .hollow::before {
+  border: 1.5px solid var(--chart-1);
+}
+
+.chart-legend .bar::before {
+  width: 4px;
+  height: 12px;
+  border-radius: 0;
+  background: var(--text);
+}
+
+/* ------------------------------------------------------- tables and code */
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.data-table th,
+.data-table td {
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------- code + limits */
+.data-table th {
+  background: var(--surface);
+  color: var(--text-3);
+  font-weight: 500;
+}
+
+.data-table td.num,
+.data-table th.num {
+  text-align: right;
+}
+
+.data-table td.wrap {
+  white-space: normal;
+  min-width: 14em;
+}
+
+.data-table tr:last-child td {
+  border-bottom: 0;
+}
 
 .code-grid {
   display: grid;
@@ -391,8 +616,8 @@ body {
   padding: var(--s2) var(--s4);
   border-bottom: 1px solid var(--border);
   background: var(--surface);
-  color: var(--text-3);
-  font-size: 12.5px;
+  color: var(--text-2);
+  font-size: 13.5px;
 }
 
 .code-grid pre {
@@ -402,11 +627,28 @@ body {
   line-height: 1.7;
 }
 
+.legend {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--s4);
+  margin: var(--s5) 0 0;
+}
+
+.legend dt {
+  margin-bottom: var(--s1);
+}
+
+.legend dd {
+  margin: 0;
+  color: var(--text-3);
+  font-size: 13.5px;
+}
+
 .limits {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0 var(--s6);
-  margin: 0;
+  margin: var(--s4) 0 0;
   padding: 0;
   list-style: none;
 }
@@ -414,15 +656,15 @@ body {
 .limits li {
   padding: var(--s4) 0;
   border-bottom: 1px solid var(--border);
-  color: var(--text-2);
-  font-size: 14px;
+  color: var(--text-3);
+  font-size: 14.5px;
 }
 
 .limits strong {
   display: block;
   margin-bottom: var(--s1);
   color: var(--text);
-  font-weight: 500;
+  font-weight: 600;
 }
 
 /* ---------------------------------------------------------------- footer */
@@ -440,92 +682,50 @@ body {
   align-items: center;
   gap: var(--s3) var(--s5);
   color: var(--text-3);
-  font-size: 13px;
+  font-size: 13.5px;
 }
 
 .site-footer-inner .grow {
   flex: 1;
 }
 
-/* ---------------------------------------------------------------- motion */
-
-/* Sections settle in with a short slide only; they are never hidden, so
-   screenshots, print, find-in-page, and failed observers still show evidence. */
-.reveal.in {
-  animation: settle var(--dur-slow) var(--ease);
-}
-
-@keyframes settle {
-  from {
-    transform: translateY(6px);
-  }
-  to {
-    transform: none;
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  html {
-    scroll-behavior: auto;
-  }
-}
-
 /* ------------------------------------------------------------ responsive */
 
 @media (max-width: 1024px) {
-  .pipeline {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--s6);
+  }
+
+  .steps {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .pipeline li {
-    border-bottom: 1px solid var(--border);
-  }
-
-  .pipeline li:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .pipeline li:last-child {
-    grid-column: 1 / -1;
-    border-bottom: 0;
-  }
-
-  .demo-grid {
+  .demo-grid,
+  .chart-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .experiment .metrics {
+  .legend {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .experiment .metrics > div:nth-child(2n) {
-    border-right: 0;
-  }
-
-  .experiment .metrics > div:nth-child(-n + 2) {
-    border-bottom: 1px solid var(--border);
+  .site-nav a {
+    padding: 6px 7px;
   }
 }
 
-@media (max-width: 768px) {
-  body {
-    font-size: 14.5px;
+@media (max-width: 860px) {
+  .menu-toggle {
+    display: inline-flex;
   }
 
-  .section-wrap,
-  .site-header-inner,
-  .site-footer-inner {
-    padding-left: var(--s4);
-    padding-right: var(--s4);
+  .hide-narrow {
+    display: none;
   }
 
   .site-header-inner {
-    gap: var(--s2);
-  }
-
-  .menu-toggle {
-    display: inline-flex;
-    min-height: 36px;
+    justify-content: space-between;
   }
 
   .site-nav {
@@ -536,6 +736,7 @@ body {
     display: none;
     flex-direction: column;
     gap: 0;
+    margin: 0;
     padding: var(--s2) var(--s4) var(--s4);
     border-bottom: 1px solid var(--border);
     background: var(--bg);
@@ -543,7 +744,6 @@ body {
 
   .site-nav.open {
     display: flex;
-    animation: rise var(--dur) var(--ease);
   }
 
   .site-nav a {
@@ -553,18 +753,29 @@ body {
     padding: 0 var(--s2);
     border-bottom: 1px solid var(--border);
     border-radius: 0;
+    font-size: 15px;
   }
 
   .site-nav a:last-child {
     border-bottom: 0;
   }
+}
+
+@media (max-width: 768px) {
+  .section-wrap,
+  .site-header-inner,
+  .site-footer-inner {
+    padding-left: var(--s4);
+    padding-right: var(--s4);
+  }
 
   .hero {
     padding-top: var(--s7);
+    padding-bottom: var(--s7);
   }
 
   .lede {
-    font-size: 16px;
+    font-size: 17px;
   }
 
   .hero-actions .btn {
@@ -576,32 +787,32 @@ body {
     padding-bottom: var(--s7);
   }
 
-  .proof,
-  .pipeline,
-  .where,
+  .diagram .flow-h {
+    display: none;
+  }
+
+  .diagram .flow-v {
+    display: block;
+  }
+
+  .three-up,
+  .steps,
   .code-grid,
-  .limits {
+  .limits,
+  .legend {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .proof > div + div {
-    border-left: 0;
-    border-top: 1px solid var(--border);
+  .three-up {
+    gap: var(--s4);
   }
 
-  .pipeline li,
-  .pipeline li:nth-child(2n) {
-    border-right: 0;
+  .preview-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0;
   }
 
-  .pipeline li:last-child {
-    grid-column: auto;
-  }
-
-  .experiment header,
-  .experiment .reading,
-  .experiment .metrics > div {
-    padding-left: var(--s4);
-    padding-right: var(--s4);
+  .preview-facts dd {
+    margin-bottom: var(--s2);
   }
 }
