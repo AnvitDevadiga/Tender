@@ -685,8 +685,29 @@ pre code {
   font-size: 13.5px;
 }
 
-.site-footer-inner .grow {
-  flex: 1;
+.footer-brand {
+  flex: 1 1 280px;
+  display: grid;
+  gap: var(--s2);
+}
+
+.footer-links {
+  display: flex;
+  gap: var(--s5);
+}
+
+.footer-brand .wordmark {
+  color: var(--text);
+}
+
+.footer-brand p {
+  margin: 0;
+}
+
+.footer-tagline {
+  color: var(--text-2);
+  font-size: 14px;
+  line-height: 1.45;
 }
 
 /* ------------------------------------------------------------ responsive */
