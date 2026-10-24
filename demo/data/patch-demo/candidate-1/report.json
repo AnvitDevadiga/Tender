@@ -1,0 +1,369 @@
+{
+  "schema": "tender.patch_report.v1",
+  "report_id": "ef17413c-e84f-431c-bdbb-960cc3c86b46",
+  "created_at": "2026-10-24T10:18:20+00:00",
+  "task": {
+    "title": "median() is wrong for even-length input",
+    "description": "median([4, 1, 3, 2]) returns 3. For an even number of values it must return the mean of the two middle values (2.5). Keep the existing behaviour for odd-length and empty input."
+  },
+  "criteria": {
+    "sha256": "32673b7aab54bb72c4b7fcd2fe0d566280d0952a01ec8227758b1c5b934c5b1d",
+    "file": "criteria.toml",
+    "target": [
+      {
+        "name": "even-length median (hidden evaluator tests)",
+        "pytest": [
+          "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+          "tests/test_median_target.py::test_median_even_length_floats"
+        ]
+      }
+    ],
+    "regression": [
+      {
+        "name": "existing statistics behaviour",
+        "pytest": [
+          "tests/test_core.py"
+        ]
+      }
+    ],
+    "setup": [],
+    "constraints": {
+      "timeout_seconds": 60,
+      "deadline_seconds": 300,
+      "max_patch_bytes": 1048576,
+      "max_files": 100,
+      "allow_binary": false,
+      "check_baseline": true,
+      "python": "python3"
+    }
+  },
+  "patch": {
+    "file": "candidate-1.patch",
+    "sha256": "a6916cac33813024493b7f88f6645fc2371da397dcb805e03f8bf610274ef528",
+    "bytes": 520,
+    "diff": "diff --git a/stats/core.py b/stats/core.py\nindex fdacfd7..f792414 100644\n--- a/stats/core.py\n+++ b/stats/core.py\n@@ -12,5 +12,8 @@ def median(values):\n     \"\"\"Return the median of a non-empty sequence.\"\"\"\n     if not values:\n         raise ValueError(\"median() requires at least one value\")\n-    ordered = sorted(values)\n-    return ordered[len(ordered) // 2]\n+    values.sort()\n+    middle = len(values) // 2\n+    if len(values) % 2:\n+        return values[middle]\n+    return (values[middle - 1] + values[middle]) / 2\n",
+    "files": [
+      {
+        "path": "stats/core.py",
+        "old_path": "stats/core.py",
+        "status": "modified",
+        "binary": false,
+        "mode": "100644",
+        "additions": 5,
+        "deletions": 2
+      }
+    ],
+    "additions": 5,
+    "deletions": 2
+  },
+  "environment": {
+    "tender_version": "0.2.0",
+    "python": "3.12.14",
+    "implementation": "cpython",
+    "platform": "macOS-27.0.1",
+    "machine": "arm64",
+    "git": "git version 2.54.0 (Apple Git-157)",
+    "sandbox": {
+      "backend": "docker",
+      "isolation": "docker container",
+      "image": "tender-sandbox:local",
+      "image_pinned_by_digest": false,
+      "network": "none",
+      "memory": "2g",
+      "cpus": "2",
+      "pids_limit": 256,
+      "capabilities": "all dropped",
+      "root_filesystem": "read-only",
+      "user": "65532:65532"
+    },
+    "python_command": "python3",
+    "trust_local_execution": null
+  },
+  "explanations": [
+    "Regression check “existing statistics behaviour” failed (failing: tests/test_core.py::test_median_does_not_mutate_input)."
+  ],
+  "unknowns": [
+    "Behaviour not exercised by the configured checks. Passing checks do not prove the absence of other defects or regressions."
+  ],
+  "repository": {
+    "name": "stats-demo",
+    "requested_base": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+    "base_commit": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+    "head_commit": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+    "working_tree_dirty": false,
+    "working_tree_entries": 0,
+    "note": "Uncommitted and ignored files are never used; workspaces are built from Git objects at base_commit.",
+    "source_unchanged": true
+  },
+  "validation": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "size limit",
+        "passed": true,
+        "detail": "520 bytes (limit 1048576)"
+      },
+      {
+        "name": "UTF-8 text",
+        "passed": true,
+        "detail": ""
+      },
+      {
+        "name": "unified diff syntax",
+        "passed": true,
+        "detail": "1 files"
+      },
+      {
+        "name": "file count",
+        "passed": true,
+        "detail": "1 (limit 100)"
+      },
+      {
+        "name": "paths stay inside the repository",
+        "passed": true,
+        "detail": ""
+      },
+      {
+        "name": "no symbolic links",
+        "passed": true,
+        "detail": ""
+      },
+      {
+        "name": "no submodule changes",
+        "passed": true,
+        "detail": ""
+      },
+      {
+        "name": "binary policy",
+        "passed": true,
+        "detail": "no binary changes"
+      },
+      {
+        "name": "no protected or evaluator-owned paths",
+        "passed": true,
+        "detail": ""
+      },
+      {
+        "name": "applies cleanly to the base commit",
+        "passed": true,
+        "detail": ""
+      }
+    ]
+  },
+  "integrity": {
+    "passed": true,
+    "violations": [],
+    "policy": {
+      "protected_paths": [
+        ".tender/**"
+      ],
+      "restored_paths": [
+        "conftest.py",
+        "**/conftest.py",
+        "pytest.ini",
+        "tox.ini",
+        "setup.cfg",
+        "noxfile.py",
+        "pyproject.toml",
+        "tests/**",
+        "test/**"
+      ],
+      "reject_tool_shadowing": true
+    },
+    "evaluator_assets": [
+      {
+        "path": "tests/test_median_target.py",
+        "bytes": 278,
+        "sha256": "dcccdb80645a61df862ace6c85043f8ff63017cb8a2d6e8435f0089bb802838f"
+      }
+    ],
+    "restored_from_base": [],
+    "removed_patch_additions": []
+  },
+  "baseline": {
+    "kind": "baseline",
+    "checks": [
+      {
+        "name": "even-length median (hidden evaluator tests)",
+        "command": "tests/test_median_target.py::test_median_even_length_averages_middle_values tests/test_median_target.py::test_median_even_length_floats",
+        "passed": false,
+        "return_code": 1,
+        "timed_out": false,
+        "duration_ms": 324,
+        "stdout": "FF                                                                       [100%]\n=================================== FAILURES ===================================\n________________ test_median_even_length_averages_middle_values ________________\n\n    def test_median_even_length_averages_middle_values():\n>       assert median([4, 1, 3, 2]) == 2.5\nE       assert 3 == 2.5\nE        +  where 3 = median([4, 1, 3, 2])\n\ntests/test_median_target.py:7: AssertionError\n________________________ test_median_even_length_floats ________________________\n\n    def test_median_even_length_floats():\n>       assert median([1.0, 2.0]) == 1.5\nE       assert 2.0 == 1.5\nE        +  where 2.0 = median([1.0, 2.0])\n\ntests/test_median_target.py:11: AssertionError\n-------- generated xml file: /workspace/.tender-junit-778bf2247c6a.xml ---------\n=========================== short test summary info ============================\nFAILED tests/test_median_target.py::test_median_even_length_averages_middle_values\nFAILED tests/test_median_target.py::test_median_even_length_floats - assert 2...\n2 failed in 0.01s\n",
+        "stderr": "",
+        "executed": "python3 -m pytest -q -p no:cacheprovider -o addopts= -o junit_family=xunit1 --junitxml=.tender-junit-778bf2247c6a.xml 'tests/test_median_target.py::test_median_even_length_averages_middle_values' 'tests/test_median_target.py::test_median_even_length_floats'; status=$?; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-778bf2247c6a.xml 2>/dev/null; exit $status",
+        "tests": [
+          {
+            "id": "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+            "outcome": "failed",
+            "cases": "1"
+          },
+          {
+            "id": "tests/test_median_target.py::test_median_even_length_floats",
+            "outcome": "failed",
+            "cases": "1"
+          }
+        ]
+      }
+    ],
+    "pristine": true,
+    "status": "failed",
+    "timed_out": false,
+    "duration_ms": 460,
+    "note": "Target checks failed before the patch, so they can distinguish a fix."
+  },
+  "target": {
+    "kind": "target",
+    "checks": [
+      {
+        "name": "even-length median (hidden evaluator tests)",
+        "command": "tests/test_median_target.py::test_median_even_length_averages_middle_values tests/test_median_target.py::test_median_even_length_floats",
+        "passed": true,
+        "return_code": 0,
+        "timed_out": false,
+        "duration_ms": 292,
+        "stdout": "..                                                                       [100%]\n-------- generated xml file: /workspace/.tender-junit-f2a8335b235d.xml ---------\n2 passed in 0.01s\n",
+        "stderr": "",
+        "executed": "python3 -m pytest -q -p no:cacheprovider -o addopts= -o junit_family=xunit1 --junitxml=.tender-junit-f2a8335b235d.xml 'tests/test_median_target.py::test_median_even_length_averages_middle_values' 'tests/test_median_target.py::test_median_even_length_floats'; status=$?; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-f2a8335b235d.xml 2>/dev/null; exit $status",
+        "tests": [
+          {
+            "id": "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+            "outcome": "passed",
+            "cases": "1"
+          },
+          {
+            "id": "tests/test_median_target.py::test_median_even_length_floats",
+            "outcome": "passed",
+            "cases": "1"
+          }
+        ]
+      }
+    ],
+    "pristine": true,
+    "restored_from_base": [],
+    "removed_patch_additions": [],
+    "status": "passed",
+    "timed_out": false,
+    "duration_ms": 454
+  },
+  "regression": {
+    "kind": "regression",
+    "checks": [
+      {
+        "name": "existing statistics behaviour",
+        "command": "tests/test_core.py",
+        "passed": false,
+        "return_code": 1,
+        "timed_out": false,
+        "duration_ms": 288,
+        "stdout": "....F                                                                    [100%]\n=================================== FAILURES ===================================\n______________________ test_median_does_not_mutate_input _______________________\n\n    def test_median_does_not_mutate_input():\n        values = [3, 1, 2]\n        median(values)\n>       assert values == [3, 1, 2]\nE       assert [1, 2, 3] == [3, 1, 2]\nE         \nE         At index 0 diff: 1 != 3\nE         Use -v to get more diff\n\ntests/test_core.py:27: AssertionError\n-------- generated xml file: /workspace/.tender-junit-13149835d3bc.xml ---------\n=========================== short test summary info ============================\nFAILED tests/test_core.py::test_median_does_not_mutate_input - assert [1, 2, ...\n1 failed, 4 passed in 0.01s\n",
+        "stderr": "",
+        "executed": "python3 -m pytest -q -p no:cacheprovider -o addopts= -o junit_family=xunit1 --junitxml=.tender-junit-13149835d3bc.xml 'tests/test_core.py'; status=$?; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-13149835d3bc.xml 2>/dev/null; exit $status",
+        "tests": [
+          {
+            "id": "tests/test_core.py",
+            "outcome": "failed",
+            "cases": "5",
+            "failing_cases": "tests/test_core.py::test_median_does_not_mutate_input"
+          }
+        ]
+      }
+    ],
+    "pristine": true,
+    "restored_from_base": [],
+    "removed_patch_additions": [],
+    "status": "failed",
+    "timed_out": false,
+    "duration_ms": 461
+  },
+  "outcome": {
+    "schema_version": "tender.outcome.v1",
+    "target": "passed",
+    "regression": "failed",
+    "integrity": "passed",
+    "environment": "ok",
+    "provider": "not_used",
+    "timed_out": false,
+    "policy": "ok",
+    "independently_verified": true,
+    "verification_commit": "36c85c7eb48586c4fbd12888858cffbaf77bce94",
+    "overall": "rejected",
+    "reasons": []
+  },
+  "timing_ms": {
+    "validation": 79,
+    "baseline": 460,
+    "target_verification": 454,
+    "regression_verification": 461,
+    "total_wall_clock": 1620
+  },
+  "summary": "Rejected: regression checks failed with the patch applied.",
+  "evidence": {
+    "manifest_sha256": "69c18601f6597a9fbb2a7d32188867f7c881ba3e8327a8e0732cd24ff98b9324",
+    "files": [
+      {
+        "path": "derived/outcome.json",
+        "kind": "derived",
+        "bytes": 631,
+        "sha256": "59eafc8ddae99effe21eb63876b1999ecaf391533f671f02f0b7be769955511a"
+      },
+      {
+        "path": "source/checks/baseline.json",
+        "kind": "source",
+        "bytes": 2424,
+        "sha256": "9eb4dabf4f35ae42a1ef2df142f2ed7c56723c4e0269b8db8f8b13368069e981"
+      },
+      {
+        "path": "source/checks/regression.json",
+        "kind": "source",
+        "bytes": 1738,
+        "sha256": "06a3237d214d4fa1e73dea135ea4c30b824cc8fc51802e05e74fef4e95199b31"
+      },
+      {
+        "path": "source/checks/target.json",
+        "kind": "source",
+        "bytes": 1474,
+        "sha256": "393346e207a33bdaababe8e3ccfdee38930780763b81feaa253513a7cefe54b6"
+      },
+      {
+        "path": "source/criteria",
+        "kind": "source",
+        "bytes": 756,
+        "sha256": "32673b7aab54bb72c4b7fcd2fe0d566280d0952a01ec8227758b1c5b934c5b1d"
+      },
+      {
+        "path": "source/environment.json",
+        "kind": "source",
+        "bytes": 585,
+        "sha256": "d285518bafeb79b9d73a16a427148e30d65077ae25901dbcaf957c3f5c345bce"
+      },
+      {
+        "path": "source/integrity.json",
+        "kind": "source",
+        "bytes": 605,
+        "sha256": "37d0e4bdd680c5b68e2e09e3d27e9902b1796dd0b7c4c7b7b83a2b0e6e158d01"
+      },
+      {
+        "path": "source/patch.diff",
+        "kind": "source",
+        "bytes": 520,
+        "sha256": "a6916cac33813024493b7f88f6645fc2371da397dcb805e03f8bf610274ef528"
+      },
+      {
+        "path": "source/repository.json",
+        "kind": "source",
+        "bytes": 414,
+        "sha256": "d8918578066ad5441350fc428f8cbddadc5bdc586d2f0515403d601dd1d5a0ef"
+      },
+      {
+        "path": "source/validation.json",
+        "kind": "source",
+        "bytes": 1023,
+        "sha256": "46f6c5a6e6ebca53ce4d4bf13ea66f6459dccf805e149caf647bd2f8c881226e"
+      }
+    ],
+    "signed": false
+  },
+  "markdown": "# Tender patch verification: median() is wrong for even-length input\n\n**REJECTED** — Rejected: regression checks failed with the patch applied.\n\n| Property | Result |\n| --- | --- |\n| Repository | `stats-demo` |\n| Base commit | `36c85c7eb48586c4fbd12888858cffbaf77bce94` |\n| Patch | `candidate-1.patch` · sha256 `a6916cac33813024` |\n| Validation | passed |\n| Integrity | passed |\n| Baseline | failed |\n| Target checks | passed |\n| Regression checks | failed |\n| Environment | ok (docker) |\n| Independently verified | yes |\n| Source repository unchanged | True |\n| Duration | 1.6 s |\n\n## Why\n\n- Regression check “existing statistics behaviour” failed (failing: tests/test_core.py::test_median_does_not_mutate_input).\n\n## Baseline checks (failed)\n\n- [ ] even-length median (hidden evaluator tests) — exit 1\n  - `tests/test_median_target.py::test_median_even_length_averages_middle_values`: failed\n  - `tests/test_median_target.py::test_median_even_length_floats`: failed\n\n## Target checks (passed)\n\n- [x] even-length median (hidden evaluator tests) — exit 0\n  - `tests/test_median_target.py::test_median_even_length_averages_middle_values`: passed\n  - `tests/test_median_target.py::test_median_even_length_floats`: passed\n\n## Regression checks (failed)\n\n- [ ] existing statistics behaviour — exit 1\n  - `tests/test_core.py`: failed (tests/test_core.py::test_median_does_not_mutate_input)\n\n## Not established\n\n- Behaviour not exercised by the configured checks. Passing checks do not prove the absence of other defects or regressions.\n\nEvidence manifest sha256 `69c18601f6597a9fbb2a7d32188867f7c881ba3e8327a8e0732cd24ff98b9324` (hashed, not signed). Verify with `tender evidence verify <dir>/evidence`.\n"
+}

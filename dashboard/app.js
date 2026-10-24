@@ -1448,7 +1448,7 @@ function renderCheckGroup(group, title) {
   const checks = (group.checks || [])
     .map((check) => {
       const tests = (check.tests || [])
-        .map((test) => `<li>${statusMark(test.outcome === "passed" ? "passed" : test.outcome === "missing" ? "unknown" : "failed", test.outcome)} <span>${esc(test.id)}</span></li>`)
+        .map((test) => `<li>${statusMark(test.outcome === "passed" ? "passed" : test.outcome === "missing" ? "unknown" : "failed", test.outcome)} <span>${esc(test.id)}${test.failing_cases ? ` — failing: ${esc(test.failing_cases)}` : ""}</span></li>`)
         .join("");
       return `${renderCommandCheck({ ...check, kind: check.name })}${tests ? `<div class="check"><ul class="tests" aria-label="Per-test outcomes">${tests}</ul></div>` : ""}`;
     })

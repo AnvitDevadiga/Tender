@@ -7,7 +7,7 @@ byte-for-byte without any local databases or ignored artifacts:
 * demo/data/replay-inputs/legacy-runs.v1.json – recorded run payloads and
   recorded event streams for the 19 published runs (exported once by
   scripts/export_replay_inputs.py on the recording machine).
-* demo/data/patch-demo/*.report.json – reports produced by running the
+* demo/data/patch-demo/*/report.json – reports produced by running the
   deterministic patch-verification demo (scripts/run_patch_demo.py).
 
 Provenance rules:
@@ -107,7 +107,7 @@ def patch_reports() -> list[dict]:
     if not REPORT_DIR.is_dir():
         return []
     reports = []
-    for path in sorted(REPORT_DIR.glob("*.report.json")):
+    for path in sorted(REPORT_DIR.glob("*/report.json")):
         report = json.loads(path.read_text(encoding="utf-8"))
         report["provenance"] = {
             "record": "recorded",
@@ -168,7 +168,7 @@ def build() -> str:
     inputs += (
         [
             {"path": str(path.relative_to(REPO_ROOT)), "sha256": digest(path)}
-            for path in sorted(REPORT_DIR.glob("*.report.json"))
+            for path in sorted(REPORT_DIR.glob("*/report.json"))
         ]
         if REPORT_DIR.is_dir()
         else []

@@ -1,0 +1,24 @@
+{
+  "outcome": {
+    "environment": "ok",
+    "independently_verified": true,
+    "integrity": "passed",
+    "overall": "rejected",
+    "policy": "ok",
+    "provider": "not_used",
+    "reasons": [],
+    "regression": "failed",
+    "schema_version": "tender.outcome.v1",
+    "target": "passed",
+    "timed_out": false,
+    "verification_commit": "36c85c7eb48586c4fbd12888858cffbaf77bce94"
+  },
+  "summary": "Rejected: regression checks failed with the patch applied.",
+  "timing_ms": {
+    "baseline": 460,
+    "regression_verification": 461,
+    "target_verification": 454,
+    "total_wall_clock": 1620,
+    "validation": 79
+  }
+}

@@ -155,7 +155,7 @@ function failingTests(report) {
   const failed = [];
   for (const group of [report.target, report.regression]) {
     for (const check of group?.checks || []) {
-      for (const test of check.tests || []) if (test.outcome !== "passed") failed.push(test.id);
+      for (const test of check.tests || []) if (test.outcome !== "passed") failed.push(test.failing_cases || test.id);
     }
   }
   return failed;

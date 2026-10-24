@@ -1,0 +1,29 @@
+{
+  "checks": [
+    {
+      "command": "tests/test_core.py",
+      "duration_ms": 284,
+      "executed": "python3 -m pytest -q -p no:cacheprovider -o addopts= -o junit_family=xunit1 --junitxml=.tender-junit-346fc3cdb184.xml 'tests/test_core.py'; status=$?; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-346fc3cdb184.xml 2>/dev/null; exit $status",
+      "name": "existing statistics behaviour",
+      "passed": true,
+      "return_code": 0,
+      "stderr": "",
+      "stdout": ".....                                                                    [100%]\n-------- generated xml file: /workspace/.tender-junit-346fc3cdb184.xml ---------\n5 passed in 0.01s\n",
+      "tests": [
+        {
+          "cases": "5",
+          "id": "tests/test_core.py",
+          "outcome": "passed"
+        }
+      ],
+      "timed_out": false
+    }
+  ],
+  "duration_ms": 456,
+  "kind": "regression",
+  "pristine": true,
+  "removed_patch_additions": [],
+  "restored_from_base": [],
+  "status": "passed",
+  "timed_out": false
+}

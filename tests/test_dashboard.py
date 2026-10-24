@@ -158,7 +158,7 @@ def test_static_site_has_no_broken_local_links(tmp_path) -> None:
         source = (site / module).read_text(encoding="utf-8")
         for path in re.findall(r'import [^;]+ from "(\./[^"]+)"', source):
             assert (site / path).is_file(), f"{module} imports missing {path}"
-    for fetched in ("docs/experiments/retrieval-cap-ab-v1.json",):
+    for fetched in ("data/patch-demo/index.json", "docs/experiments/retrieval-cap-ab-v1.json"):
         assert (site / fetched).is_file(), f"landing page fetches missing {fetched}"
     assert checked > 10
 
@@ -171,7 +171,11 @@ def test_javascript_unit_tests_pass() -> None:
     if shutil.which("node") is None:
         pytest.skip("node is required for the JavaScript unit tests")
     completed = subprocess.run(
-        ["node", "--test", "tests/js/diff.test.mjs"], cwd=ROOT, capture_output=True, text=True, timeout=60
+        ["node", "--test", "tests/js/diff.test.mjs"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        timeout=60,
     )
     assert completed.returncode == 0, completed.stdout[-2000:] + completed.stderr[-2000:]
     for script in ("dashboard/app.js", "dashboard/lib.js", "demo/demo.js", "demo/replay/replay.js"):

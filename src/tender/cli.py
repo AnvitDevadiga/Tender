@@ -4,12 +4,17 @@ import argparse
 import asyncio
 import json
 import os
+import sys
 from pathlib import Path
 
+from .evidence import verify_bundle
 from .experiments import BenchmarkTask, ExperimentManifest
+from .patch_eval import PatchEvaluationError, evaluate_patch, render_markdown
 from .providers import GroqProvider
 from .runner import LiveProviderNotAuthorized, compare_experiment_results, run_experiment_sync
 from .worker import serve as serve_worker
+
+EXIT_ACCEPTED, EXIT_REJECTED, EXIT_NOT_EVALUATED = 0, 1, 2
 
 
 async def _check_groq() -> int:
@@ -27,22 +32,98 @@ async def _check_groq() -> int:
     return 0
 
 
-def main() -> int:
-    parser = argparse.ArgumentParser(prog="tender")
-    parser.add_argument(
-        "command",
-        choices=["check-groq", "run-experiment", "validate-benchmark", "compare", "worker"],
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog="tender", description="Independent, evidence-backed verification for code changes."
     )
-    parser.add_argument("--manifest")
-    parser.add_argument("--dataset")
-    parser.add_argument("--output", default="results.json")
-    parser.add_argument("--results", nargs="+")
-    parser.add_argument(
-        "--authorize-live-provider",
+    commands = parser.add_subparsers(dest="command", required=True)
+
+    verify = commands.add_parser(
+        "verify-patch", help="Evaluate a patch against a pinned commit with fixed criteria."
+    )
+    verify.add_argument("--repo", required=True, help="Local Git repository (read-only).")
+    verify.add_argument("--base", required=True, help="Base commit or ref to verify against.")
+    verify.add_argument("--patch", required=True, help="Unified Git diff to evaluate.")
+    verify.add_argument("--criteria", required=True, help="Acceptance criteria (.toml or .json).")
+    verify.add_argument("--out", required=True, help="New directory for report and evidence.")
+    verify.add_argument("--sandbox", choices=["docker", "local"], default="docker")
+    verify.add_argument(
+        "--trust-local-execution",
         action="store_true",
-        help="Allow run-experiment to call a billable provider within the manifest budget.",
+        help="Allow --sandbox local: the patch runs on this machine without isolation.",
     )
-    args = parser.parse_args()
+    verify.add_argument("--python", help="Python command used for pytest checks.")
+    verify.add_argument("--name", help="Repository display name for the report.")
+
+    report = commands.add_parser("report", help="Work with patch verification reports.")
+    report_actions = report.add_subparsers(dest="action", required=True)
+    render = report_actions.add_parser("render", help="Print a report as Markdown or JSON.")
+    render.add_argument("report")
+    render.add_argument("--format", choices=["md", "json"], default="md")
+
+    evidence = commands.add_parser("evidence", help="Work with evidence bundles.")
+    evidence_actions = evidence.add_subparsers(dest="action", required=True)
+    check = evidence_actions.add_parser("verify", help="Recompute every hash in a bundle.")
+    check.add_argument("bundle")
+
+    commands.add_parser("check-groq", help="Make one small request to Groq.")
+    commands.add_parser("worker", help="Run the queue worker (needs TENDER_WORKSPACE_ROOT).")
+
+    for name in ("run-experiment", "validate-benchmark", "compare"):
+        sub = commands.add_parser(name)
+        sub.add_argument("--manifest")
+        sub.add_argument("--dataset")
+        sub.add_argument("--output", default="results.json")
+        sub.add_argument("--results", nargs="+")
+        sub.add_argument(
+            "--authorize-live-provider",
+            action="store_true",
+            help="Allow run-experiment to call a billable provider within the manifest budget.",
+        )
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = _parser()
+    args = parser.parse_args(argv)
+    if args.command == "verify-patch":
+        try:
+            report = evaluate_patch(
+                args.repo,
+                args.base,
+                args.patch,
+                args.criteria,
+                args.out,
+                sandbox=args.sandbox,
+                trust_local_execution=args.trust_local_execution,
+                python=args.python,
+                repository_name=args.name,
+            )
+        except (PatchEvaluationError, OSError, ValueError) as exc:
+            parser.exit(EXIT_NOT_EVALUATED, f"tender verify-patch: {exc}\n")
+        overall = report["outcome"]["overall"]
+        print(f"{overall.upper()}: {report['summary']}")
+        for line in report.get("explanations", []):
+            print(f"  - {line}")
+        print(f"report: {Path(args.out) / 'report.json'}")
+        if overall == "accepted":
+            return EXIT_ACCEPTED
+        return EXIT_REJECTED if overall == "rejected" else EXIT_NOT_EVALUATED
+    if args.command == "report":
+        payload = json.loads(Path(args.report).read_text(encoding="utf-8"))
+        if args.format == "json":
+            print(json.dumps(payload, indent=2, ensure_ascii=False))
+        else:
+            sys.stdout.write(payload.get("markdown") or render_markdown(payload))
+        return 0
+    if args.command == "evidence":
+        problems = verify_bundle(args.bundle)
+        if problems:
+            for problem in problems:
+                print(f"FAIL {problem}")
+            return 1
+        print(f"OK every file in {args.bundle} matches its manifest hash (bundle is not signed)")
+        return 0
     if args.command == "check-groq":
         return asyncio.run(_check_groq())
     if args.command == "worker":
@@ -73,7 +154,7 @@ def main() -> int:
             )
         except LiveProviderNotAuthorized as exc:
             parser.error(str(exc))
-        print(f"Experiment complete: {result['summary']}")
+        print(f"Experiment {result['status']}: {result['summary']}")
         return 0
     if args.command == "validate-benchmark":
         if not args.manifest or not args.dataset:

@@ -1,0 +1,33 @@
+{
+  "checks": [
+    {
+      "command": "tests/test_median_target.py::test_median_even_length_averages_middle_values tests/test_median_target.py::test_median_even_length_floats",
+      "duration_ms": 324,
+      "executed": "python3 -m pytest -q -p no:cacheprovider -o addopts= -o junit_family=xunit1 --junitxml=.tender-junit-778bf2247c6a.xml 'tests/test_median_target.py::test_median_even_length_averages_middle_values' 'tests/test_median_target.py::test_median_even_length_floats'; status=$?; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-778bf2247c6a.xml 2>/dev/null; exit $status",
+      "name": "even-length median (hidden evaluator tests)",
+      "passed": false,
+      "return_code": 1,
+      "stderr": "",
+      "stdout": "FF                                                                       [100%]\n=================================== FAILURES ===================================\n________________ test_median_even_length_averages_middle_values ________________\n\n    def test_median_even_length_averages_middle_values():\n>       assert median([4, 1, 3, 2]) == 2.5\nE       assert 3 == 2.5\nE        +  where 3 = median([4, 1, 3, 2])\n\ntests/test_median_target.py:7: AssertionError\n________________________ test_median_even_length_floats ________________________\n\n    def test_median_even_length_floats():\n>       assert median([1.0, 2.0]) == 1.5\nE       assert 2.0 == 1.5\nE        +  where 2.0 = median([1.0, 2.0])\n\ntests/test_median_target.py:11: AssertionError\n-------- generated xml file: /workspace/.tender-junit-778bf2247c6a.xml ---------\n=========================== short test summary info ============================\nFAILED tests/test_median_target.py::test_median_even_length_averages_middle_values\nFAILED tests/test_median_target.py::test_median_even_length_floats - assert 2...\n2 failed in 0.01s\n",
+      "tests": [
+        {
+          "cases": "1",
+          "id": "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+          "outcome": "failed"
+        },
+        {
+          "cases": "1",
+          "id": "tests/test_median_target.py::test_median_even_length_floats",
+          "outcome": "failed"
+        }
+      ],
+      "timed_out": false
+    }
+  ],
+  "duration_ms": 460,
+  "kind": "baseline",
+  "note": "Target checks failed before the patch, so they can distinguish a fix.",
+  "pristine": true,
+  "status": "failed",
+  "timed_out": false
+}

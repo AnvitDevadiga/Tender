@@ -2,6 +2,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -21,6 +22,7 @@ from .models import (
     RunEvent,
     RunStatus,
 )
+from .patch_eval import load_reports
 from .services import RunService
 from .store import ApprovalConflict, CancelConflict, IdempotencyConflict, RunStore
 
@@ -468,6 +470,42 @@ async def get_run_artifact(run_id: str) -> dict[str, object]:
         "available": True,
         "files": sorted(str(item.relative_to(path)) for item in path.rglob("*") if item.is_file()),
     }
+
+
+REPORT_ID = re.compile(r"^[0-9a-f-]{8,64}$")
+
+
+def _report_root() -> Path | None:
+    value = os.getenv("TENDER_REPORT_ROOT")
+    return Path(value).expanduser().resolve() if value else None
+
+
+@app.get("/reports")
+async def list_reports() -> list[dict[str, object]]:
+    """Patch verification reports under TENDER_REPORT_ROOT (newest first, no diffs)."""
+    root = _report_root()
+    if root is None:
+        raise HTTPException(status_code=404, detail="report directory is not configured")
+    summaries = []
+    for report in load_reports(root):
+        summary = {key: report.get(key) for key in ("report_id", "created_at", "task", "summary")}
+        summary["outcome"] = report.get("outcome")
+        summary["repository"] = report.get("repository")
+        patch = report.get("patch") or {}
+        summary["patch"] = {key: patch.get(key) for key in ("file", "sha256", "bytes")}
+        summaries.append(summary)
+    return summaries
+
+
+@app.get("/reports/{report_id}")
+async def get_report(report_id: str) -> dict[str, object]:
+    root = _report_root()
+    if root is None or not REPORT_ID.fullmatch(report_id):
+        raise HTTPException(status_code=404, detail="report not found")
+    for report in load_reports(root):
+        if report.get("report_id") == report_id:
+            return report
+    raise HTTPException(status_code=404, detail="report not found")
 
 
 @app.get("/metrics")

@@ -1,0 +1,15 @@
+diff --git a/stats/core.py b/stats/core.py
+index fdacfd7..f792414 100644
+--- a/stats/core.py
++++ b/stats/core.py
+@@ -12,5 +12,8 @@ def median(values):
+     """Return the median of a non-empty sequence."""
+     if not values:
+         raise ValueError("median() requires at least one value")
+-    ordered = sorted(values)
+-    return ordered[len(ordered) // 2]
++    values.sort()
++    middle = len(values) // 2
++    if len(values) % 2:
++        return values[middle]
++    return (values[middle - 1] + values[middle]) / 2
