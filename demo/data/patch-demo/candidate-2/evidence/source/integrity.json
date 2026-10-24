@@ -6,8 +6,14 @@
       "sha256": "dcccdb80645a61df862ace6c85043f8ff63017cb8a2d6e8435f0089bb802838f"
     }
   ],
+  "evaluator_sections": [],
   "passed": true,
   "policy": {
+    "evaluator_sections": {
+      "pyproject.toml": "tool.pytest",
+      "setup.cfg": "tool:pytest",
+      "tox.ini": "pytest"
+    },
     "protected_paths": [
       ".tender/**"
     ],
@@ -16,15 +22,15 @@
       "conftest.py",
       "**/conftest.py",
       "pytest.ini",
-      "tox.ini",
-      "setup.cfg",
+      "pytest.toml",
+      ".pytest.toml",
       "noxfile.py",
-      "pyproject.toml",
       "tests/**",
       "test/**"
     ]
   },
   "removed_patch_additions": [],
   "restored_from_base": [],
+  "tested_as_submitted": true,
   "violations": []
 }

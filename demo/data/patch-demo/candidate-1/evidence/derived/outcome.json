@@ -1,6 +1,7 @@
 {
   "outcome": {
     "environment": "ok",
+    "failed_stage": null,
     "independently_verified": true,
     "integrity": "passed",
     "overall": "rejected",
@@ -15,10 +16,11 @@
   },
   "summary": "Rejected: regression checks failed with the patch applied.",
   "timing_ms": {
-    "baseline": 460,
-    "regression_verification": 461,
-    "target_verification": 454,
-    "total_wall_clock": 1620,
-    "validation": 79
+    "baseline": 573,
+    "expected_coverage": 1851,
+    "regression_verification": 555,
+    "target_verification": 569,
+    "total_wall_clock": 3819,
+    "validation": 83
   }
 }

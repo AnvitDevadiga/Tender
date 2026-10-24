@@ -2,13 +2,32 @@
   "checks": [
     {
       "command": "tests/test_median_target.py::test_median_even_length_averages_middle_values tests/test_median_target.py::test_median_even_length_floats",
-      "duration_ms": 287,
-      "executed": "python3 -m pytest -q -p no:cacheprovider -o addopts= -o junit_family=xunit1 --junitxml=.tender-junit-7f31d4250343.xml 'tests/test_median_target.py::test_median_even_length_averages_middle_values' 'tests/test_median_target.py::test_median_even_length_floats'; status=$?; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-7f31d4250343.xml 2>/dev/null; exit $status",
+      "coverage": {
+        "collected": [
+          "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+          "tests/test_median_target.py::test_median_even_length_floats"
+        ],
+        "duplicate_collected": [],
+        "executed": [
+          "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+          "tests/test_median_target.py::test_median_even_length_floats"
+        ],
+        "expected": [
+          "tests/test_median_target.py::test_median_even_length_averages_middle_values",
+          "tests/test_median_target.py::test_median_even_length_floats"
+        ],
+        "extra_candidate_cases": [],
+        "missing_required": [],
+        "not_collected_by_candidate": [],
+        "provenance": "base_commit_collection"
+      },
+      "duration_ms": 379,
+      "executed": "python3 -m pytest -p no:cacheprovider -o addopts= --collect-only -q 'tests/test_median_target.py::test_median_even_length_averages_middle_values' 'tests/test_median_target.py::test_median_even_length_floats' > .tender-collect-0a5ecb39e66e.txt 2>&1; collect_status=$?; python3 -m pytest -p no:cacheprovider -o addopts= -q -o junit_family=xunit1 --junitxml=.tender-junit-0a5ecb39e66e.xml 'tests/test_median_target.py::test_median_even_length_averages_middle_values' 'tests/test_median_target.py::test_median_even_length_floats'; status=$?; echo '----TENDER-COLLECTED-TESTS----'; echo \"$collect_status\"; cat .tender-collect-0a5ecb39e66e.txt 2>/dev/null; echo '----TENDER-JUNIT-REPORT----'; cat .tender-junit-0a5ecb39e66e.xml 2>/dev/null; exit $status",
       "name": "even-length median (hidden evaluator tests)",
       "passed": true,
       "return_code": 0,
       "stderr": "",
-      "stdout": "..                                                                       [100%]\n-------- generated xml file: /workspace/.tender-junit-7f31d4250343.xml ---------\n2 passed in 0.01s\n",
+      "stdout": "..                                                                       [100%]\n-------- generated xml file: /workspace/.tender-junit-0a5ecb39e66e.xml ---------\n2 passed in 0.00s\n",
       "tests": [
         {
           "cases": "1",
@@ -24,11 +43,13 @@
       "timed_out": false
     }
   ],
-  "duration_ms": 467,
+  "duration_ms": 555,
+  "evaluator_sections": [],
   "kind": "target",
   "pristine": true,
   "removed_patch_additions": [],
   "restored_from_base": [],
   "status": "passed",
+  "tested_as_submitted": true,
   "timed_out": false
 }

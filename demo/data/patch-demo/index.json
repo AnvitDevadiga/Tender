@@ -7,12 +7,12 @@
     {
       "file": "candidate-1/report.json",
       "label": "Candidate 1: plausible fix",
-      "report_id": "ef17413c-e84f-431c-bdbb-960cc3c86b46"
+      "report_id": "a79b8690-2bb8-46aa-80f3-aa8f27c25d6d"
     },
     {
       "file": "candidate-2/report.json",
       "label": "Candidate 2: corrected fix",
-      "report_id": "7bcf7f3b-60a5-4dd7-ae5b-74e8512d9f0d"
+      "report_id": "8fbe39ba-3fae-418f-a3bc-3d24e2160fc6"
     }
   ]
 }

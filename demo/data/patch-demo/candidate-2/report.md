@@ -15,7 +15,7 @@
 | Environment | ok (docker) |
 | Independently verified | yes |
 | Source repository unchanged | True |
-| Duration | 1.6 s |
+| Duration | 2.6 s |
 
 ## Baseline checks (failed)
 
@@ -38,4 +38,4 @@
 
 - Behaviour not exercised by the configured checks. Passing checks do not prove the absence of other defects or regressions.
 
-Evidence manifest sha256 `d19fd141850b2d1f9680ecbf616aa4e7ad728cf9495cbbb4619689b8efb4327e` (hashed, not signed). Verify with `tender evidence verify <dir>/evidence`.
+Evidence manifest sha256 `804ebbf381edbc44a41c3b81b490cbdb25822320b55bda8f85b0f037de05e6a9` (hashed, not signed). Verify with `tender evidence verify <dir>/evidence`.

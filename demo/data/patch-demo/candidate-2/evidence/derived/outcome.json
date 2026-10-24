@@ -1,6 +1,7 @@
 {
   "outcome": {
     "environment": "ok",
+    "failed_stage": null,
     "independently_verified": true,
     "integrity": "passed",
     "overall": "accepted",
@@ -15,10 +16,11 @@
   },
   "summary": "Accepted: target checks passed in a fresh workspace at 36c85c7eb4 and regression checks also passed.",
   "timing_ms": {
-    "baseline": 456,
-    "regression_verification": 456,
-    "target_verification": 467,
-    "total_wall_clock": 1643,
-    "validation": 84
+    "baseline": 552,
+    "expected_coverage": 590,
+    "regression_verification": 573,
+    "target_verification": 556,
+    "total_wall_clock": 2578,
+    "validation": 99
   }
 }
