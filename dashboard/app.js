@@ -78,7 +78,7 @@ const state = {
   /** @type {any[]} */ runs: [],
   total: 0,
   /** @type {any|null} */ metrics: null,
-  filters: { q: "", status: "all", model: "all", benchmark: "all", sort: "newest" },
+  filters: { q: "", status: "all", model: "all", benchmark: "all", category: "all", sort: "newest" },
   /** @type {Set<string>} */ compare: new Set(),
   /** @type {string|null} */ selectedId: null,
   limit: PAGE_SIZE,
@@ -199,9 +199,11 @@ function statusMark(status, text, extra = "") {
   )}</span></span>`;
 }
 
+const LABEL_TEXT = { recorded: "Recorded", derived: "Derived", unknown: "Unknown", verified: "Verified" };
+
 /** @param {"recorded"|"derived"|"unknown"|"verified"} kind @param {string} [title] */
 function label(kind, title = "") {
-  return `<span class="label ${kind}"${title ? ` title="${esc(title)}"` : ""}>${kind}</span>`;
+  return `<span class="label ${kind}"${title ? ` title="${esc(title)}"` : ""}>${LABEL_TEXT[kind] || kind}</span>`;
 }
 
 /** @param {any} run */
@@ -349,7 +351,7 @@ function renderShell() {
             <span class="connection" id="connection" role="status"><span class="dot" aria-hidden="true"></span><span class="label-text">connecting</span></span>
             ${home}
             <button class="btn ghost small hide-xs" type="button" data-action="open-palette" aria-label="Command palette" title="Command palette (⌘K)"><kbd>⌘K</kbd></button>
-            <button class="btn ghost icon" type="button" data-action="toggle-theme" id="theme-btn" aria-label="Switch color theme" title="Theme (t)">◐</button>
+            <button class="btn ghost small" type="button" data-action="toggle-theme" id="theme-btn" aria-label="Switch color theme" title="Theme (t)">Dark</button>
             <button class="btn ghost small" type="button" data-action="help" aria-label="Help and shortcuts">Help</button>
           </div>
         </div>
@@ -426,7 +428,7 @@ function applyRoute() {
   const viewChanged = route.view !== renderedView;
   state.view = route.view;
   let filtersChanged = false;
-  for (const key of /** @type {const} */ (["q", "status", "model", "benchmark", "sort"])) {
+  for (const key of /** @type {const} */ (["q", "status", "model", "benchmark", "category", "sort"])) {
     const value = route.params.get(key);
     if (value !== null && value !== state.filters[key]) {
       state.filters[key] = value;
@@ -462,7 +464,7 @@ function navigate(hash) {
 
 function filterQuery() {
   const params = new URLSearchParams();
-  const defaults = { q: "", status: "all", model: "all", benchmark: "all", sort: "newest" };
+  const defaults = { q: "", status: "all", model: "all", benchmark: "all", category: "all", sort: "newest" };
   for (const [key, value] of Object.entries(state.filters)) {
     if (value !== /** @type {any} */ (defaults)[key]) params.set(key, value);
   }
@@ -479,6 +481,74 @@ function syncFilters() {
 
 /* ============================================================== runs view */
 
+const OUTCOME_LABELS = {
+  passed: "Passed",
+  awaiting: "Queued, running, or awaiting",
+  test: "Test failure",
+  integrity_violation: "Integrity violation",
+  policy_rejection: "Policy rejection",
+  provider_error: "Provider error",
+  environment_setup: "Environment error",
+  timeout: "Timeout",
+  planning: "Agent stopped before verification",
+  patch: "Agent stopped before verification (patch)",
+  tooling: "Tooling error",
+  cancelled: "Cancelled",
+  other: "Other failure",
+};
+
+/** One outcome bucket per run, from recorded status and failure category. */
+function outcomeKey(run) {
+  if (run.status === "passed") return "passed";
+  if (run.status === "cancelled") return "cancelled";
+  if (run.status !== "failed") return "awaiting";
+  return run.failure_category in OUTCOME_LABELS ? run.failure_category : "other";
+}
+
+function renderBreakdown() {
+  const m = state.metrics;
+  if (!m || !m.runs) return "";
+  const rows = [["passed", m.passed]];
+  for (const [category, count] of Object.entries(m.failure_categories || {})) {
+    rows.push([category in OUTCOME_LABELS ? category : "other", count]);
+  }
+  const unfinished = (m.queued_runs || 0) + (m.running_runs || 0) + (m.awaiting_approval || 0);
+  if (unfinished) rows.push(["awaiting", unfinished]);
+  if (m.cancelled_runs) rows.push(["cancelled", m.cancelled_runs]);
+  const max = Math.max(1, ...rows.map(([, count]) => Number(count)));
+  /** @param {number} value @param {number} total */
+  const bar = (value, total) =>
+    `<svg class="mini-bar" viewBox="0 0 100 8" preserveAspectRatio="none" aria-hidden="true"><rect x="0" y="0" width="100" height="8" class="track"></rect><rect x="0" y="0" width="${Math.max(1.5, (100 * value) / total)}" height="8" class="fill"></rect></svg>`;
+  const outcomes = rows
+    .filter(([, count]) => Number(count) > 0)
+    .map(
+      ([key, count]) => `<button type="button" class="bar-row ${state.filters.category === key ? "active" : ""}" data-action="set-filter" data-group="category" data-value="${state.filters.category === key ? "all" : esc(key)}" aria-pressed="${state.filters.category === key}">
+        <span class="name">${esc(OUTCOME_LABELS[key] || key)}</span>${bar(Number(count), max)}<span class="count">${fmtInt(Number(count))}</span></button>`,
+    )
+    .join("");
+  const models = Object.entries(m.by_model || {})
+    .map(
+      ([model, row]) => `<tr><td><button type="button" class="link-button mono" data-action="set-filter" data-group="model" data-value="${
+        state.filters.model === model ? "all" : esc(model)
+      }" aria-pressed="${state.filters.model === model}">${esc(model)}</button></td>
+        <td class="num">${fmtInt(row.runs)}</td><td class="num">${fmtInt(row.passed)}</td>
+        <td class="num">${fmtPct(row.pass_rate)}</td><td class="num">${fmtInt(row.provider_failures ?? 0)}</td></tr>`,
+    )
+    .join("");
+  return `<section class="breakdown" aria-label="Outcomes and models">
+      <div class="breakdown-panel">
+        <h2>Outcomes ${label("derived", "Counted from recorded run status and failure category")}</h2>
+        <p class="hint">Select a row to show its runs.</p>
+        <div class="bar-list">${outcomes}</div>
+      </div>
+      <div class="breakdown-panel">
+        <h2>Models ${label("derived", "Aggregated from recorded runs")}</h2>
+        <p class="hint">Model as recorded (provider/model). Select one to filter.</p>
+        <div class="table-wrap"><table class="kv-table models-table"><thead><tr><th>Model</th><th class="num">Runs</th><th class="num">Passed</th><th class="num">Pass rate</th><th class="num">Provider failures</th></tr></thead><tbody>${models}</tbody></table></div>
+      </div>
+    </section>`;
+}
+
 function visibleRuns() {
   const key = `${state.runsVersion}|${JSON.stringify(state.filters)}`;
   if (derivedRows.key === key) return derivedRows.rows;
@@ -488,6 +558,7 @@ function visibleRuns() {
     if (filters.status !== "all" && run.status !== filters.status) return false;
     if (filters.model !== "all" && run.config?.model !== filters.model) return false;
     if (filters.benchmark !== "all" && run.benchmark_id !== filters.benchmark) return false;
+    if (filters.category !== "all" && outcomeKey(run) !== filters.category) return false;
     if (!query) return true;
     return [
       run.issue?.title,
@@ -546,9 +617,12 @@ function renderMain() {
       <div class="actions-row">
         <button class="btn small" type="button" data-action="setup">Run locally</button>
         <button class="btn small" type="button" data-action="refresh">Refresh</button>
+        <button class="btn small" type="button" data-action="export-json" title="Export the current view as JSON">Export JSON</button>
+        <button class="btn small" type="button" data-action="export-csv" title="Export the current view as CSV">Export CSV</button>
       </div>
     </div>
     <dl class="summary" id="summary" aria-label="Workspace metrics">${renderSummary()}</dl>
+    <div id="breakdown">${renderBreakdown()}</div>
     <div class="toolbar" role="search">
       <div class="search">
         <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2.2"></circle><line x1="16.5" y1="16.5" x2="21" y2="21" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"></line></svg>
@@ -559,8 +633,6 @@ function renderMain() {
       <div class="filters ${state.filtersOpen ? "open" : ""}" id="filters">${renderFilters()}</div>
       <span class="grow"></span>
       <span class="view-count" id="view-count"></span>
-      <button class="btn small" type="button" data-action="export-json">JSON</button>
-      <button class="btn small" type="button" data-action="export-csv">CSV</button>
     </div>
     <div id="compare-bar"></div>
     <div id="run-list" aria-live="polite"></div>`;
@@ -573,8 +645,8 @@ function renderMain() {
 }
 
 function activeFilterCount() {
-  const { status, model, benchmark, sort } = state.filters;
-  return [status !== "all", model !== "all", benchmark !== "all", sort !== "newest"].filter(Boolean).length;
+  const { status, model, benchmark, category, sort } = state.filters;
+  return [status !== "all", model !== "all", benchmark !== "all", category !== "all", sort !== "newest"].filter(Boolean).length;
 }
 
 function renderFilters() {
@@ -600,6 +672,12 @@ function renderFilters() {
     <div class="segmented" role="group" aria-label="Status">${statusButtons}</div>
     ${select("model", state.filters.model, models, "All models")}
     ${select("benchmark", state.filters.benchmark, benchmarks, "All benchmarks")}
+    <select class="select" data-action="select-filter" data-group="category" aria-label="Filter by outcome">
+      <option value="all">All outcomes</option>
+      ${Object.entries(OUTCOME_LABELS)
+        .map(([value, text]) => `<option value="${value}" ${value === state.filters.category ? "selected" : ""}>${esc(text)}</option>`)
+        .join("")}
+    </select>
     <select class="select" data-action="select-filter" data-group="sort" aria-label="Sort runs">
       ${SORT_OPTIONS.map(([value, text]) => `<option value="${value}" ${value === state.filters.sort ? "selected" : ""}>${text}</option>`).join("")}
     </select>
@@ -784,6 +862,8 @@ async function refresh(_options = {}) {
       if (state.view === "runs") {
         const summary = $("#summary");
         if (summary) summary.innerHTML = renderSummary();
+        const breakdown = $("#breakdown");
+        if (breakdown && !breakdown.contains(document.activeElement)) breakdown.innerHTML = renderBreakdown();
         const filters = $("#filters");
         if (filters && !filters.contains(document.activeElement)) filters.innerHTML = renderFilters();
         renderList();
@@ -1448,6 +1528,35 @@ function renderReportPanel(report, tab) {
     ${unknowns ? `<div class="section"><h3>Not established by this report</h3><ul class="tests">${unknowns}</ul></div>` : ""}`;
 }
 
+const COVERAGE_SOURCES = {
+  evaluator_declared: "Declared by the evaluator (expected_tests)",
+  base_commit_collection: "Collected at the base commit, before the patch",
+  evaluator_source_static: "Read from evaluator-owned test source",
+  candidate_collection_authorized: "Candidate's own collection (evaluator-authorized; not independent)",
+  unavailable: "Could not be established; the check failed closed",
+};
+
+/** Which tests were required, by whom, and which actually ran. */
+function renderCoverage(coverage) {
+  if (!coverage) return "";
+  const trusted = coverage.provenance !== "candidate_collection_authorized" && coverage.provenance !== "unavailable";
+  /** @param {string} name @param {string[]} ids */
+  const list = (name, ids) =>
+    ids?.length ? `<details><summary>${esc(name)} (${ids.length})</summary><pre class="json">${esc(ids.join("\n"))}</pre></details>` : "";
+  return `<div class="check coverage">
+      <div class="check-head">${label(trusted ? "verified" : "unknown")}<span class="what">Required tests: ${esc(
+        COVERAGE_SOURCES[coverage.provenance] || coverage.provenance,
+      )}</span>
+        <span class="facts-inline">${fmtInt(coverage.executed?.length ?? 0)} of ${fmtInt(coverage.expected?.length ?? 0)} required ran</span></div>
+      ${coverage.unavailable_reason ? `<p class="view-count">${esc(coverage.unavailable_reason)}</p>` : ""}
+      ${coverage.missing_required?.length ? `<p class="callout">Required tests that did not run: <code>${esc(coverage.missing_required.join(", "))}</code></p>` : ""}
+      ${list("Expected", coverage.expected)}${list("Collected in the candidate workspace", coverage.collected)}${list("Executed", coverage.executed)}${list(
+        "Extra cases added by the candidate",
+        coverage.extra_candidate_cases,
+      )}
+    </div>`;
+}
+
 /** @param {any} group @param {string} title */
 function renderCheckGroup(group, title) {
   if (!group) return "";
@@ -1456,7 +1565,7 @@ function renderCheckGroup(group, title) {
       const tests = (check.tests || [])
         .map((test) => `<li>${statusMark(test.outcome === "passed" ? "passed" : test.outcome === "missing" ? "unknown" : "failed", test.outcome)} <span>${esc(test.id)}${test.failing_cases ? ` — failing: ${esc(test.failing_cases)}` : ""}</span></li>`)
         .join("");
-      return `${renderCommandCheck({ ...check, kind: check.name })}${tests ? `<div class="check"><ul class="tests" aria-label="Per-test outcomes">${tests}</ul></div>` : ""}`;
+      return `${renderCommandCheck({ ...check, kind: check.name })}${tests ? `<div class="check"><ul class="tests" aria-label="Per-test outcomes">${tests}</ul></div>` : ""}${renderCoverage(check.coverage)}`;
     })
     .join("");
   return `<div class="section"><h3>${esc(title)} ${statusMark(group.status || "unknown")}</h3>
@@ -1781,7 +1890,7 @@ function runPalette(index) {
 
 /* ======================================================= filters & export */
 
-/** @param {"status"|"model"|"benchmark"|"sort"} group @param {string} value */
+/** @param {"status"|"model"|"benchmark"|"category"|"sort"} group @param {string} value */
 function setFilter(group, value) {
   state.filters[group] = value;
   syncFilters();
@@ -1789,6 +1898,12 @@ function setFilter(group, value) {
   else {
     const filters = $("#filters");
     if (filters) filters.innerHTML = renderFilters();
+    const breakdown = $("#breakdown");
+    if (breakdown) {
+      const focusedKey = document.activeElement?.closest?.("#breakdown") ? document.activeElement.getAttribute("data-group") : null;
+      breakdown.innerHTML = renderBreakdown();
+      if (focusedKey) /** @type {HTMLElement|null} */ (breakdown.querySelector(`[data-group="${focusedKey}"][aria-pressed="true"], [data-group="${focusedKey}"]`))?.focus();
+    }
     const toggle = $("[data-action='toggle-filters']");
     if (toggle) toggle.textContent = `Filters${activeFilterCount() ? ` · ${activeFilterCount()}` : ""}`;
     renderList();
@@ -1796,7 +1911,7 @@ function setFilter(group, value) {
 }
 
 function clearFilters() {
-  state.filters = { q: "", status: "all", model: "all", benchmark: "all", sort: "newest" };
+  state.filters = { q: "", status: "all", model: "all", benchmark: "all", category: "all", sort: "newest" };
   syncFilters();
   renderMain();
 }
@@ -1885,20 +2000,21 @@ function renderToasts() {
 
 /* ================================================================== theme */
 
+/** Light unless the visitor explicitly chose dark; the OS preference is not used. */
 function currentTheme() {
-  const stored = storageGet(STORE_KEYS.theme);
-  if (stored === "light" || stored === "dark") return stored;
-  return window.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  return storageGet(STORE_KEYS.theme) === "dark" ? "dark" : "light";
 }
 
 function applyTheme() {
-  const stored = storageGet(STORE_KEYS.theme);
-  if (stored === "light" || stored === "dark") document.documentElement.dataset.theme = stored;
+  const theme = currentTheme();
+  if (theme === "dark") document.documentElement.dataset.theme = "dark";
   else delete document.documentElement.dataset.theme;
   const button = $("#theme-btn");
   if (button) {
-    const next = currentTheme() === "dark" ? "light" : "dark";
+    const next = theme === "dark" ? "light" : "dark";
+    button.textContent = theme === "dark" ? "Light" : "Dark";
     button.setAttribute("aria-label", `Switch to ${next} theme`);
+    button.setAttribute("aria-pressed", String(theme === "dark"));
     button.title = `Switch to ${next} theme (t)`;
   }
 }
@@ -2196,7 +2312,6 @@ function bindEvents() {
     if (!document.hidden) refresh({ quiet: true });
     else window.clearTimeout(pollTimer);
   });
-  window.matchMedia?.("(prefers-color-scheme: dark)").addEventListener?.("change", applyTheme);
 }
 
 function loadStoredFilters() {
