@@ -696,3 +696,26 @@ def test_matched_task_comparison_ignores_excluded_trials(tmp_path) -> None:
     assert comparison["matched_tasks"] == 1
     assert comparison["unmatched_tasks"] == ["t2"]
     assert comparison["baseline"]["retrieval_limit"] == 6
+
+
+@pytest.mark.asyncio
+async def test_agent_side_failure_is_rejected_not_inconclusive(tmp_path) -> None:
+    source = tmp_path / "source"
+    make_repo(source)
+    agent = tmp_path / "agent"
+    subprocess.run(["git", "clone", "-q", str(source), str(agent)], check=True)
+
+    class BadPlans:
+        async def generate(self, messages, tools=None):
+            return ModelResponse("no plan here")
+
+    result = await AgentWorkflow(BadPlans()).run(
+        Issue(repository="o/r", title="fix", body="fix"),
+        agent,
+        [EXPECT_TWO],
+        max_retries=0,
+        verification_workspace=source,
+    )
+    assert result.outcome.failed_stage == "planning"
+    assert result.outcome.target is CheckOutcome.NOT_RUN
+    assert result.outcome.overall is OverallStatus.REJECTED

@@ -1,71 +1,165 @@
 <div align="center">
-  <img src="assets/tender-wordmark-transparent.png" width="360" alt="tender.">
-  <p><strong>Give coding agents a task. Keep the proof.</strong></p>
-  <p><a href="https://anvitdevadiga.github.io/Tender/">Live demo</a> · <a href="https://github.com/AnvitDevadiga/Tender">Source</a></p>
+  <img src="assets/tender-wordmark-transparent.png" width="320" alt="tender.">
+  <p><strong>Verify AI-generated code before you trust it.</strong></p>
+  <p><a href="https://anvitdevadiga.github.io/Tender/">Live demo</a> · <a href="https://anvitdevadiga.github.io/Tender/replay/">Recorded replay</a> · <a href="docs/PATCH_VERIFICATION.md">Verify a patch</a> · <a href="docs/SECURITY.md">Security</a></p>
 </div>
 
-Tender is a local-first platform for evaluating coding agents. It gives an agent a repository task, runs its proposed changes in a controlled workspace, checks the result, and records what happened.
+# Tender
 
-![Tender evaluation flow](assets/tender-architecture-transparent.png)
+Tender independently verifies code changes produced by coding agents, or by anyone else. You give it a local repository, a pinned base commit, a patch, and acceptance criteria written before the patch ran. It applies the patch in fresh, isolated workspaces, runs your target and regression checks, and writes a report plus a hash-sealed evidence bundle of what happened.
 
-## What it records
+It can also run its own bounded agent loop against pinned benchmark tasks and record every step, so you can compare models and configurations on evidence rather than claims.
 
-- Whether the task passed and whether existing behavior regressed
-- The patch, test results, run timeline, and failure category
-- Runtime, token counts, and provider-reported cost when available
-- Task, repository revision, and experiment configuration for reproducibility
+## What Tender does
 
-## Backend capabilities
+- **Verifies a patch** (`tender verify-patch`): validation, baseline, target checks, regression checks, integrity enforcement, report, evidence.
+- **Runs an agent on a task** (API + worker, or the benchmark runner): plan, edit through authorized tools, test, verify in a pristine workspace, record.
+- **Keeps evidence**: every command, exit code, output tail, digest, stage duration, and event, with `recorded`, `derived`, and `unknown` kept distinct.
+- **Shows it**: a local dashboard for runs and reports; a read-only replay of recorded data on GitHub Pages.
 
-- A durable SQLite queue: the API enqueues runs, and a separate lease-based worker claims and executes them with stale-writer fencing and no silent replays.
-- Independent verification: every claimed success is re-run from a clean repository copy with the exact patch applied.
-- Cancellation: queued runs can be cancelled atomically; workers never pick them up.
-- Provider adapters: Groq and any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM, Ollama, ...) behind one typed tool-calling boundary; retries cover rate limits, transient 5xx responses, and network timeouts.
-- Operable API: paginated and filterable run listing with a `summary=true` mode that drops patch, test-output, and issue-body payloads and an `X-Total-Count` header for honest pagination; paginated event timelines (5000 events per page by default, 20000 maximum); latency percentiles and per-model metrics; readiness checks; an optional bearer token for run creation and cancellation; a request-size cap; a disabled-by-default per-client rate limit for mutating routes; and conservative security headers with a strict dashboard CSP.
+## Why independent verification matters
 
-## Try it locally
+An agent's statement that a change works is not evidence, and neither is a test run inside the agent's own workspace. That workspace can contain leftovers from earlier attempts, weakened tests, or a `conftest.py` that turns every failure into a pass. Tender judges a patch only where the patch cannot reach the judge:
 
-Requirements: Python 3.12 or newer. Docker is needed for isolated Docker runs. A model API key is only needed for real hosted-model calls; the offline test suite and benchmark validation work without one.
+- each check runs in a new workspace built from Git objects at the exact base commit;
+- test files and test-runner configuration are reset to the base commit before checks run;
+- hidden evaluator tests are added only after the patch is applied and never shown to the candidate;
+- patches that touch protected paths, or add modules that shadow the test tooling, are rejected before anything runs;
+- named tests must appear as passed in a JUnit report, so exiting with status 0 is not enough.
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-python3 scripts/prepare_fixtures.py
-python -m tender validate-benchmark \
-  --manifest experiments/retry-ablation-v1.toml \
-  --dataset benchmarks/tasks.jsonl
+## Core capabilities
+
+| Area | What exists |
+| --- | --- |
+| Repository boundary | Never runs Git against untrusted `.git` metadata; sanitized copies, no hooks, no helpers; ignored files never copied |
+| Commit identity | Requested and executed commits recorded; mismatches rejected before any provider call |
+| Pristine verification | Fresh workspace per check; pre-patch fingerprint recorded; directories removed afterwards |
+| Tool authorization | Allowlist enforced at dispatch; refusals recorded; `run_command` never implicit |
+| Outcomes | Separate target, regression, integrity, environment, provider, timeout, policy, overall |
+| Reliability | Lease-fenced events, artifacts, and results; cancellable deadlines; whole-database metrics |
+| Evidence | Per-file SHA-256 manifests; source vs derived; sanitized; verifiable (`tender evidence verify`) |
+| Experiments | Seeded/counterbalanced trials, exclusions, quota-aware stopping, live-provider budgets, Wilson intervals, matched comparisons |
+| Interface | Monochrome dashboard and replay: runs, inspector, diff viewer, compare, reports, keyboard navigation |
+
+## Architecture
+
+```mermaid
+flowchart LR
+  Source[(Your repository<br/>read-only)] -->|.git bytes copied, sanitized| Snapshot[TrustedRepository]
+  Snapshot -->|materialize at commit| Agent[Agent workspace]
+  Snapshot -->|materialize per check| Verifier[Fresh verifier workspaces]
+  Patch[Patch or agent edits] --> Verifier
+  Criteria[Criteria + hidden tests] --> Verifier
+  Verifier --> Sandbox{{Docker sandbox}}
+  Sandbox --> Report[report.json / report.md]
+  Report --> Evidence[(evidence/ manifest)]
+  API[FastAPI] --> Store[(SQLite runs + events)]
+  Worker[Lease-based worker] --> Store
+  Dashboard[Dashboard / replay] --> API
 ```
 
-To use Groq, set `GROQ_API_KEY` in your local environment, then run `python -m tender check-groq`. For any OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM, Ollama, ...), set `OPENAI_API_KEY` and optionally `OPENAI_BASE_URL` and `OPENAI_MODEL`, then select models with the `openai/` prefix. Never commit `.env` or API keys.
+Details: [Architecture](docs/ARCHITECTURE.md) · [Agent workflow](docs/AGENT_WORKFLOW.md) · [Evaluation contract](docs/evaluation-contract.md).
 
-Start the local API and run explorer:
+## Quick start
+
+Requirements: Python 3.12+, Git. Docker for untrusted code. No model API key is needed for patch verification or the test suite.
 
 ```bash
-uvicorn tender.api:app --reload
+git clone https://github.com/AnvitDevadiga/Tender.git
+cd Tender
+python3 -m venv .venv && source .venv/bin/activate
+pip install -e '.[dev]'
+python scripts/prepare_fixtures.py      # deterministic benchmark fixtures
+pytest -q                               # offline test suite (Docker tests skip without a daemon)
+
+docker build -f Dockerfile.sandbox -t tender-sandbox:local .   # sandbox image with pytest
+python scripts/run_patch_demo.py        # failure-and-repair demo; uses Docker when available
 ```
 
-Open [http://127.0.0.1:8000/dashboard](http://127.0.0.1:8000/dashboard). The dashboard is a command-center explorer: keyboard shortcuts with a ⌘K command palette, status/model/benchmark filters, a tabbed run inspector with patch diffs and timelines, up to four-run comparison, JSON/CSV export, and adaptive live refresh. It is a local inspection tool served as zero-build ES modules, not a multi-user product UI. For Docker-backed queued runs, see [Local deployment](docs/DEPLOYMENT.md) and [Security](docs/SECURITY.md). The API is a development prototype; it is not a public arbitrary-code execution service.
+Start the API and dashboard:
 
-## Live demo and current evidence
+```bash
+TENDER_REPORT_ROOT=demo/data/patch-demo uvicorn tender.api:app
+open http://127.0.0.1:8000/dashboard/
+```
 
-The [public demo](https://anvitdevadiga.github.io/Tender/) replays a recorded run and a [console replay](https://anvitdevadiga.github.io/Tender/replay/) over the published experiment records. Neither accepts tasks or executes submitted code. The paired retrieval-cap experiment planned 60 trials across 30 tasks and five pinned repositories, but provider quota and tool-call errors left only five clean task pairs. Those pairs showed no solve-rate gain from the smaller context cap, so they do not support an efficiency claim. Read the [experiment report](docs/experiments/retrieval-cap-ab-v1.md), [raw results](docs/experiments/retrieval-cap-ab-v1.json), and earlier [provider trial notes](docs/PROVIDER_TRIALS.md). Token-cost figures are published-rate estimates, not billing records.
+## Verify a local patch
 
-## Project map
+```bash
+git -C ~/code/project diff > fix.patch          # or a patch exported from any agent
+export TENDER_SANDBOX_IMAGE=tender-sandbox:local
+tender verify-patch \
+  --repo ~/code/project --base HEAD \
+  --patch fix.patch --criteria tender-criteria.toml \
+  --out reports/fix-1
+tender report render reports/fix-1/report.json  # Markdown for code review
+tender evidence verify reports/fix-1/evidence   # recompute every hash
+```
 
-- `src/tender/` — API, workflow, providers, sandbox, persistence, and benchmark runner
-- `benchmarks/` and `experiments/` — pinned tasks and experiment configurations
-- `dashboard/` — local run explorer (zero-build ES modules: `index.html`, `styles.css`, `app.js`)
-- `demo/` — read-only public portfolio demo (portfolio page plus the recorded console replay in `demo/replay/`)
-- `docs/` — architecture, evaluation contract, security, and operating notes
-- `assets/` — monochrome brand and diagram assets (SVG and transparent PNG)
+Exit status: `0` accepted, `1` rejected, `2` not evaluated (error or inconclusive). Criteria format, the meaning of every check, and the trust flags are in [Patch verification](docs/PATCH_VERIFICATION.md). The original repository is never modified; Tender re-checks it after the run and reports whether it changed.
+
+## Evaluation methodology
+
+- **Accepted** requires the target checks to pass in a pristine workspace, integrity to pass, and regression checks to pass or be explicitly *not configured*. In that last case the report says regression preservation was not measured.
+- **Rejected** means a check failed or the patch violated policy. **Error** means the environment could not run the checks (for example, no Docker). **Inconclusive** means a time limit was reached. A provider quota error is not a coding failure, and a setup failure is not an incorrect patch.
+- The **baseline** runs the target checks on the unpatched base. If they already pass, the report says they do not show that the patch is needed.
+- Experiments exclude provider and environment failures from solve rates and list them, report Wilson intervals, and compare configurations task by task.
+
+Full rules: [Evaluation contract](docs/evaluation-contract.md).
+
+## Results and limitations
+
+The published experiments are small and are reported with their limits; the landing page reads its numbers directly from these files:
+
+- [Retry ablation](docs/experiments/groq-retry-ablation-3tasks-v1.json): 18 trials over 3 synthetic tasks, all passed on the first attempt. It therefore says nothing about whether retries help, and its "regression" figure only re-ran target assertions on a clean copy ([erratum E6](docs/EVALUATION_ERRATA.md)).
+- [Retrieval-cap A/B](docs/experiments/retrieval-cap-ab-v1.md): 60 planned trials, 49 provider failures, 5 clean matched pairs, no difference. It is not evidence of capability or efficiency.
+- The [patch demo](demo/data/patch-demo/index.json) involves no model. It shows Tender rejecting a plausible patch that breaks an existing test and accepting the corrected one.
+
+Defects found in earlier versions and their effect on old records are in the dated [evaluation errata](docs/EVALUATION_ERRATA.md). Historical records are unchanged; the tests compare them byte for byte with the audited commit.
+
+## Reproducibility
+
+```bash
+python scripts/prepare_fixtures.py         # fixture commits have fixed authors and dates
+python scripts/run_patch_demo.py           # regenerate demo reports (timestamps/durations differ)
+python scripts/record_replay.py --check    # replay must rebuild byte-for-byte from committed inputs
+bash scripts/build_demo_site.sh /tmp/site  # the exact static site GitHub Pages serves
+```
+
+**Recorded** values were written by Tender while a run executed. **Derived** values are computed from recorded ones or sanitized for publication. **Unknown** values were never captured and are shown as unknown, never as zero. The public replay was rebuilt from 587 recorded events exported from the original run databases. An earlier version reconstructed events and copied values from another run ([erratum E8](docs/EVALUATION_ERRATA.md)).
+
+## Security boundaries
+
+- **Runs on your machine:** Tender itself, including Git plumbing on sanitized metadata copies, patch validation, and report writing. It never runs repository code.
+- **Runs in Docker:** setup, baseline, target, regression, and agent commands, with no network, all capabilities dropped, a read-only root, UID 65532, and CPU, memory, PID, and time limits.
+- **Runs on GitHub Pages:** nothing. The demo renders recorded JSON.
+
+Not guaranteed: the code under test runs in the same process as the test runner, so a patch designed to forge results can still mislead a check. Docker depends on a privileged host daemon. The local backend (`--trust-local-execution`) is not isolation. Evidence is hashed, not signed. Remote repositories and pull-request execution are disabled. The API is a local tool with an optional shared-secret token, not a multi-user service. See [Security](docs/SECURITY.md).
+
+## Live demo
+
+- [Landing page](https://anvitdevadiga.github.io/Tender/): proposition, the failure-and-repair demo, results, limitations.
+- [Recorded replay](https://anvitdevadiga.github.io/Tender/replay/): the real dashboard bundle over 19 recorded runs and 2 patch reports, served from a static snapshot. Nothing executes, and actions that would change state are refused.
+
+## Documentation
+
+| Document | Contents |
+| --- | --- |
+| [Patch verification](docs/PATCH_VERIFICATION.md) | Criteria reference, checks, reports, trust flags |
+| [Architecture](docs/ARCHITECTURE.md) | Components, data flow, trust boundaries |
+| [Evaluation contract](docs/evaluation-contract.md) | What each outcome means and what may be claimed |
+| [Evaluation errata](docs/EVALUATION_ERRATA.md) | Dated defects and how to read old records |
+| [Security](docs/SECURITY.md) | Threat model, controls, known limitations |
+| [Deployment](docs/DEPLOYMENT.md) | Prerequisites, environment variables, Docker, worker |
+| [Benchmarks](docs/BENCHMARKS.md) | Task schema, runner, experiment design |
+| [Current state](docs/CURRENT_STATE.md) | What is implemented, verified, and open |
 
 ## Checks
 
 ```bash
-ruff check src tests
-ruff format --check src tests
+ruff check src tests scripts && ruff format --check src tests scripts
 pytest -q
+node --test tests/js/diff.test.mjs
 ```
 
-Tender is an evolving research prototype. See [the implementation plan](docs/IMPLEMENTATION_PLAN.md) for remaining work and [the evaluation contract](docs/evaluation-contract.md) for what the measurements mean.
+Tender has no license file yet, so default copyright applies until one is chosen.

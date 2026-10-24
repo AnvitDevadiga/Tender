@@ -14,7 +14,7 @@ flowchart LR
   Apply --> Tests[Run setup and target tests]
   Tests -->|pass| Static[Diff check and configured static analysis]
   Static --> Review[Review patch integrity and scope]
-  Review --> Verify[Apply exact patch to clean copy and verify]
+  Review --> Verify[Fresh workspace per check at the base commit: apply, reset evaluator files, target then regression]
   Verify -->|pass| Done[Run passed]
   Tests -->|fail| Feedback[Capture bounded failure output]
   Static -->|fail| Feedback
@@ -64,3 +64,18 @@ Persist state, retry counters, budgets, decision summaries, and side-effect iden
 ## Trace contract
 
 For every transition/tool call, record timestamp, run/step identity, validated input summary, bounded output, duration, error/exit code, and artifact references. Record selected files and selection rationale. Record token and cost usage when available; unknown values remain unknown. Expose concise decision summaries and observable actions, never hidden chain-of-thought.
+
+## Changes in 0.2.0
+
+- Verification never reuses a directory: each target or regression check
+  materializes the validated base commit from Git objects, applies the
+  cumulative patch, resets `restored_paths`, injects hidden assets, runs, and
+  deletes the workspace. The pre-patch fingerprint is recorded.
+- Tool calls are authorized at dispatch. Unknown or unauthorized names are
+  refused and recorded as `agent_tool.rejected`, and three refusals end the
+  attempt as a `policy_rejection`. `run_command` requires an explicit allowlist.
+- Blocking work runs off the event loop under a run-wide `ExecutionBudget`.
+  Cancellation or deadline expiry kills live process groups.
+- Results carry an `EvaluationOutcome`, per-stage `timing_ms`, and counters
+  (provider transport retries, planning-format retries, attempts, tool rounds,
+  rejected tool calls).

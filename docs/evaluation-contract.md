@@ -34,6 +34,7 @@ local development unless `TENDER_REQUIRE_PINNED_COMMIT=1`.
 | `timed_out` | bool | A command or the run-wide deadline expired. |
 | `policy` | ok / rejected | Commit identity, repository safety, or tool authorization refused the run. |
 | `independently_verified` | bool | The target checks passed in a pristine verifier. |
+| `failed_stage` | planning / patch / agent_tests / static_analysis / diff_review / null | An agent-side gate stopped the run before independent verification; the candidate is rejected. |
 | `overall` | accepted / rejected / error / inconclusive / pending_approval | Derived from the fields above. |
 
 `overall = accepted` requires `target = passed`, `integrity = passed`,

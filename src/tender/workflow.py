@@ -873,6 +873,15 @@ class AgentWorkflow:
         outcome.independently_verified = bool(
             target and target.get("passed") and target.get("pristine")
         )
+        for prefix, stage in (
+            ("planning_error", "planning"),
+            ("patch_error", "patch"),
+            ("command_failed", "agent_tests"),
+            ("static_analysis_failed", "static_analysis"),
+            ("diff_review_failed", "diff_review"),
+        ):
+            if reason.startswith(prefix):
+                outcome.failed_stage = stage
         if reason not in {"task_verification_passed", "all_commands_passed"}:
             outcome.reasons.append(reason[:500])
         return outcome.finalize(awaiting_approval=awaiting_approval)

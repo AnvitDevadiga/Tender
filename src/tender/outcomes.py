@@ -55,6 +55,9 @@ class EvaluationOutcome(BaseModel):
     policy: PolicyState = "ok"
     independently_verified: bool = False
     verification_commit: str | None = None
+    #: Agent-side stage that stopped the run before independent verification
+    #: (planning, patch, agent_tests, static_analysis, diff_review); None otherwise.
+    failed_stage: str | None = None
     overall: OverallStatus = OverallStatus.INCONCLUSIVE
     reasons: list[str] = Field(default_factory=list, max_length=50)
 
@@ -72,6 +75,8 @@ def derive_overall(outcome: EvaluationOutcome, *, awaiting_approval: bool = Fals
     if outcome.provider == "failed":
         return OverallStatus.ERROR
     if outcome.target is CheckOutcome.FAILED or outcome.regression is CheckOutcome.FAILED:
+        return OverallStatus.REJECTED
+    if outcome.failed_stage and not outcome.timed_out:
         return OverallStatus.REJECTED
     if outcome.timed_out:
         return OverallStatus.INCONCLUSIVE
