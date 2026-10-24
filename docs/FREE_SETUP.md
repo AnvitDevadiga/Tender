@@ -1,6 +1,6 @@
 # Free Local Use, API Keys, and Deployment
 
-Tender is the current working project name. It can be explored locally without paying for an AI provider. This guide separates the free engineering checks from real model use and public hosting.
+Tender can be explored locally without paying for an AI provider. This guide separates the free engineering checks from real model use and public hosting.
 
 ## What this project does
 

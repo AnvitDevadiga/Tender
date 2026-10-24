@@ -34,7 +34,7 @@ The site is static and read-only. It shows recorded runs and reports, and nothin
   <img src="assets/tender-workflow-light.svg" alt="Task or patch, then pinned repository, then isolated execution, then independent checks, then evidence report">
 </picture>
 
-The patch, the agent, and the repository's Git metadata are all treated as untrusted. Test files and test-runner configuration are restored from the base commit before checks run. Hidden evaluator tests are added only after the patch is applied. Details are in [Architecture](docs/ARCHITECTURE.md) and the [Evaluation contract](docs/evaluation-contract.md).
+The patch, the agent, and the repository's Git metadata are all treated as untrusted. Test files and test-runner configuration are restored from the base commit before checks run. Hidden evaluator tests are added only after the patch is applied. Details are in [Architecture](docs/ARCHITECTURE.md), [Agent workflow](docs/AGENT_WORKFLOW.md), and the [Evaluation contract](docs/evaluation-contract.md). [Deployment](docs/DEPLOYMENT.md) covers environment variables, Docker, and the worker.
 
 ## Quick start
 
@@ -130,4 +130,6 @@ The benchmark fixture repository in `benchmarks/fixtures/forgecalc` keeps its ow
 
 ## Credits
 
-Built by Anvit Devadiga.
+**Created and maintained by [Anvit Devadiga](https://github.com/AnvitDevadiga).**
+
+Developed with engineering and implementation assistance from [Claude by Anthropic](https://claude.ai/). The project owner is responsible for technical decisions, verification, maintenance, and publication.
