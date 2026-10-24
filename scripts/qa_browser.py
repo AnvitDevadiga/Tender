@@ -53,9 +53,9 @@ with sync_playwright() as p:
     browser = p.chromium.launch(channel="chrome", headless=True)
     for scheme in ("light", "dark"):
         for width in WIDTHS:
-            context = browser.new_context(
-                viewport={"width": width, "height": 900}, color_scheme=scheme, device_scale_factor=1
-            )
+            context = browser.new_context(viewport={"width": width, "height": 900})
+            if scheme == "dark":  # the site ignores the OS scheme; dark is a stored choice
+                context.add_init_script("localStorage.setItem('tender.theme', 'dark')")
             page = context.new_page()
             errors: list[str] = []
             page.on("console", lambda msg: errors.append(msg.text) if msg.type == "error" else None)
@@ -152,6 +152,64 @@ with sync_playwright() as p:
     if stored != applied:
         findings.append(f"theme did not persist: stored {stored}, applied {applied}")
     context.close()
+
+    # Light-first: a new visitor gets light even when the OS prefers dark.
+    context = browser.new_context(viewport={"width": 1440, "height": 900}, color_scheme="dark")
+    page = context.new_page()
+    page.goto(BASE, wait_until="networkidle")
+    if page.evaluate("document.documentElement.dataset.theme"):
+        findings.append("new visitor did not get the light theme by default")
+    page.click("[data-theme-toggle]")
+    page.reload(wait_until="networkidle")
+    if page.evaluate("document.documentElement.dataset.theme") != "dark":
+        findings.append("landing theme choice did not persist")
+    page.goto(BASE + "replay/", wait_until="networkidle")
+    if page.evaluate("document.documentElement.dataset.theme") != "dark":
+        findings.append("theme choice not shared between landing and dashboard")
+    context.close()
+
+    # Charts: rendered, keyboard reachable, linked to their runs, data tables present.
+    context = browser.new_context(viewport={"width": 1440, "height": 900})
+    page = context.new_page()
+    page.goto(BASE + "#results", wait_until="networkidle")
+    page.wait_for_selector("#chart-timeline svg.chart")
+    charts = page.locator("svg.chart").count()
+    if charts < 4:
+        findings.append(f"expected 4 charts, found {charts}")
+    marks = page.locator("svg.chart a").count()
+    tables = page.locator(".chart-data table").count()
+    if not marks or tables < 4:
+        findings.append(f"chart marks {marks}, data tables {tables}")
+    page.locator("#chart-durations svg.chart a").first.focus()
+    focused = page.evaluate("document.activeElement.getAttribute('href')")
+    if not str(focused).startswith("replay/#/runs/"):
+        findings.append(f"duration mark is not a focusable run link ({focused})")
+    page.goto(BASE + "replay/", wait_until="networkidle")
+    page.wait_for_selector(".bar-row")
+    page.locator(".bar-row").first.click()
+    page.wait_for_timeout(200)
+    if "category=" not in page.evaluate("location.hash"):
+        findings.append("selecting an outcome bar did not filter the run list")
+    page.goto(BASE + "replay/#/reports", wait_until="networkidle")
+    page.wait_for_selector(".report-row")
+    page.locator(".report-row").first.click()
+    page.wait_for_selector("#inspector.open .verdict")
+    page.click("#tab-checks")
+    page.wait_for_timeout(200)
+    if not page.locator(".check.coverage").count():
+        findings.append("report checks do not show required-test coverage")
+    page.screenshot(path=str(OUT / "report-checks-1440.png"))
+    context.close()
+
+    # 200% browser zoom: half the CSS viewport at twice the pixel density.
+    for name, url in (("landing", BASE), ("replay", BASE + "replay/")):
+        context = browser.new_context(viewport={"width": 720, "height": 900}, device_scale_factor=2)
+        page = context.new_page()
+        page.goto(url, wait_until="networkidle")
+        page.wait_for_timeout(300)
+        check(page, f"{name} at 200% zoom")
+        page.screenshot(path=str(OUT / f"{name}-zoom200.png"))
+        context.close()
 
     # Mobile landing menu.
     context = browser.new_context(viewport={"width": 390, "height": 844})

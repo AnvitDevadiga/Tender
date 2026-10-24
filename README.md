@@ -6,6 +6,8 @@
 
 # Tender
 
+![Tender landing page: a recorded, Docker-verified patch report beside the product summary](assets/tender-landing.jpg)
+
 Tender independently verifies code changes produced by coding agents, or by anyone else. You give it a local repository, a pinned base commit, a patch, and acceptance criteria written before the patch ran. It applies the patch in fresh, isolated workspaces, runs your target and regression checks, and writes a report plus a hash-sealed evidence bundle of what happened.
 
 It can also run its own bounded agent loop against pinned benchmark tasks and record every step, so you can compare models and configurations on evidence rather than claims.
@@ -138,8 +140,19 @@ Not guaranteed: the code under test runs in the same process as the test runner,
 
 ## Live demo
 
-- [Landing page](https://anvitdevadiga.github.io/Tender/): proposition, the failure-and-repair demo, results, limitations.
-- [Recorded replay](https://anvitdevadiga.github.io/Tender/replay/): the real dashboard bundle over 19 recorded runs and 2 patch reports, served from a static snapshot. Nothing executes, and actions that would change state are refused.
+The [GitHub Pages site](https://anvitdevadiga.github.io/Tender/) is a static, read-only view of recorded data. The evaluation engine itself only runs locally.
+
+| Part | What it is | What it is not |
+| --- | --- | --- |
+| [Landing page](https://anvitdevadiga.github.io/Tender/) | A recorded report preview, the workflow, the failure-and-repair demo, and charts drawn from `demo/data/site-summary.json`, where each figure names its source file. | Not a live service; nothing executes. |
+| [Recorded replay](https://anvitdevadiga.github.io/Tender/replay/) | The real dashboard bundle over 19 recorded runs and 2 patch reports, served from a static snapshot. Actions that would change state are refused. | Not new evaluations. |
+| Local engine | `tender verify-patch`, the agent workflow, the API and dashboard, and Docker execution. | Not hosted anywhere. |
+
+Values on both pages are labelled **Recorded** (written while a run executed), **Derived** (computed from recorded values), **Unknown** (never captured), or **Verified** (re-checked in a fresh workspace at the pinned commit). The light theme is the default; a dark theme is available from the header and is remembered.
+
+### Model comparison scope
+
+Published Tender experiments evaluated one model: `openai/gpt-oss-20b` (published by OpenAI), served through Groq. The site lists it once per experiment, because the two experiments used different tasks and are not comparable. It does not imply results for any other model. The comparison table and dashboard model filter pick up new configurations as they are recorded.
 
 ## Documentation
 
@@ -158,8 +171,13 @@ Not guaranteed: the code under test runs in the same process as the test runner,
 
 ```bash
 ruff check src tests scripts && ruff format --check src tests scripts
-pytest -q
-node --test tests/js/diff.test.mjs
+pytest -q                                      # includes Docker tests when a daemon and image exist
+node --test tests/js/diff.test.mjs             # diff parser and renderer
+python scripts/build_site_data.py --check      # landing-page figures match committed records
+python scripts/record_replay.py --check        # replay rebuilds byte for byte
+bash scripts/build_demo_site.sh /tmp/site      # the static site exactly as Pages serves it
 ```
+
+Optional real-browser QA (Playwright, not a project dependency) covers the landing page, dashboard, replay, and inspector at 320 to 1440 px in both themes. It also checks 200% zoom, keyboard focus handling, and reduced motion. Run it with `python scripts/qa_browser.py <site-url> <screenshot-dir>`; the script header has setup notes.
 
 Tender has no license file yet, so default copyright applies until one is chosen.
