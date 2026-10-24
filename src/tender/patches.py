@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import hashlib
-import os
-import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+from .snapshot import run_safe_git
 
 
 @dataclass(frozen=True)
@@ -30,41 +30,15 @@ class PatchCapture:
 
     def capture(self, root: str | Path) -> PatchArtifact:
         root = Path(root).resolve()
-        env = {
-            "PATH": os.environ.get("PATH", ""),
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_COUNT": "0",
-        }
-        subprocess.run(
-            ["git", "-c", "core.fsmonitor=false", "add", "-N", "--", "."],
-            cwd=root,
-            check=True,
-            capture_output=True,
-            env=env,
-        )
-        diff = subprocess.check_output(
-            [
-                "git",
-                "-c",
-                "core.fsmonitor=false",
-                "diff",
-                "--no-ext-diff",
-                "--no-textconv",
-                "HEAD",
-                "--binary",
-            ],
-            cwd=root,
-            text=True,
-            env=env,
-        )
-        status = subprocess.check_output(
-            ["git", "-c", "core.fsmonitor=false", "status", "--porcelain=v1"],
-            cwd=root,
-            text=True,
-            env=env,
-        )
-        changed = tuple(sorted(line[3:] for line in status.splitlines() if len(line) >= 4))
+        # Hardened Git: helper settings in the workspace config cannot execute.
+        run_safe_git(["add", "-N", "--", "."], cwd=root)
+        diff = run_safe_git(
+            ["diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD"], cwd=root
+        ).stdout
+        status = run_safe_git(
+            ["status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"], cwd=root
+        ).stdout
+        changed = tuple(sorted(entry[3:] for entry in status.split("\0") if len(entry) >= 4))
         protected = tuple(sorted(path for path in changed if self._is_protected(path)))
         digest = hashlib.sha256(diff.encode("utf-8")).hexdigest()
         return PatchArtifact(

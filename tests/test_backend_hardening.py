@@ -512,7 +512,7 @@ class _FakeGitHubResponse:
 @pytest.mark.asyncio
 async def test_github_import_rejects_a_response_without_a_title(monkeypatch) -> None:
     monkeypatch.setattr(
-        "tender.github.request.urlopen",
+        "tender.net.open_url",
         lambda *args, **kwargs: _FakeGitHubResponse(b'{"body": "no title here"}'),
     )
 
@@ -525,7 +525,7 @@ async def test_github_import_truncates_an_oversized_body(monkeypatch) -> None:
     huge_body = "b" * (ISSUE_BODY_MAX_CHARS + 50)
     payload = json.dumps({"title": "t" * 2000, "body": huge_body}).encode("utf-8")
     monkeypatch.setattr(
-        "tender.github.request.urlopen",
+        "tender.net.open_url",
         lambda *args, **kwargs: _FakeGitHubResponse(payload),
     )
 

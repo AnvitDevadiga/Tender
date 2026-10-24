@@ -163,7 +163,7 @@ async def test_github_issue_fetch_rejects_redirect_to_other_host(monkeypatch) ->
         def read(self, size):
             return b"{}"
 
-    monkeypatch.setattr("tender.github.request.urlopen", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("tender.net.open_url", lambda *args, **kwargs: Response())
     with pytest.raises(ValueError, match="redirected"):
         await GitHubIssueClient().fetch("https://github.com/owner/repo/issues/1")
 
@@ -183,6 +183,6 @@ async def test_github_issue_fetch_caps_response_size(monkeypatch) -> None:
         def read(self, size):
             return b"x" * size
 
-    monkeypatch.setattr("tender.github.request.urlopen", lambda *args, **kwargs: Response())
+    monkeypatch.setattr("tender.net.open_url", lambda *args, **kwargs: Response())
     with pytest.raises(ValueError, match="1 MB limit"):
         await GitHubIssueClient().fetch("https://github.com/owner/repo/issues/1")

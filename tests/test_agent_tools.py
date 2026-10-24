@@ -147,7 +147,12 @@ def test_replace_text_requires_exact_match_and_run_commands_use_sandbox(tmp_path
     )
     assert unchanged.ok is False
     assert "return 1" in (repo / "app.py").read_text(encoding="utf-8")
-    assert agent_tools.execute("run_command", '{"command":"python3 -c \'print(42)\'"}').ok
+    # run_command is never granted implicitly; an explicit allowlist enables it.
+    denied = agent_tools.execute("run_command", '{"command":"python3 -c \'print(42)\'"}')
+    assert denied.rejected is True and denied.ok is False
+    explicit = toolbox(repo, allowed_tools=AgentToolbox.tool_names())
+    assert explicit.execute("run_command", '{"command":"python3 -c \'print(42)\'"}').ok
+    explicit.close()
     assert agent_tools.execute("run_tests", "{}").ok
     assert agent_tools.execute("lint", "{}").ok
     agent_tools.close()

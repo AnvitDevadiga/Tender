@@ -7,6 +7,7 @@ import re
 from urllib import request
 from urllib.parse import urlparse
 
+from . import net
 from .models import ISSUE_BODY_MAX_CHARS, ISSUE_TITLE_MAX_CHARS, Issue
 
 
@@ -53,7 +54,8 @@ class GitHubIssueClient:
         req = request.Request(
             f"https://api.github.com/repos/{owner}/{repo}/issues/{number}", headers=headers
         )
-        with request.urlopen(req, timeout=self.timeout) as response:
+        # Redirects are refused: the bearer token can only reach api.github.com.
+        with net.open_url(req, timeout=self.timeout) as response:
             final_url = urlparse(response.geturl())
             if final_url.scheme != "https" or final_url.hostname != "api.github.com":
                 raise ValueError("GitHub API redirected to an unsupported host")

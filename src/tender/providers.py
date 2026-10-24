@@ -8,6 +8,8 @@ from typing import Any, Protocol
 from urllib import request
 from urllib.error import HTTPError
 
+from . import net
+
 
 @dataclass(frozen=True)
 class ModelResponse:
@@ -84,6 +86,10 @@ class ChatCompletionsProvider:
     ) -> ModelResponse:
         if not self.api_key:
             raise RuntimeError(f"{self.api_key_name} is not configured")
+        try:
+            net.require_secure_endpoint(self.endpoint)
+        except ValueError as exc:
+            raise RuntimeError(f"{self.api_name} is not configured securely: {exc}") from exc
         payload: dict[str, Any] = {"model": self.model, "messages": messages}
         if self.supports_temperature:
             payload["temperature"] = 0
@@ -129,8 +135,10 @@ class ChatCompletionsProvider:
             },
         )
         try:
-            with request.urlopen(req, timeout=self.timeout) as response:
+            with net.open_url(req, timeout=self.timeout) as response:
                 data = json.loads(response.read().decode("utf-8"))
+        except net.RedirectRefused as exc:
+            raise RuntimeError(f"{self.api_name} API rejected the request ({exc.code}): {exc.msg}")
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")
             raise RuntimeError(

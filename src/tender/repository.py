@@ -4,7 +4,6 @@ import os
 import re
 import shutil
 import stat
-import subprocess
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -169,53 +168,23 @@ class RepositoryManager:
 
     @staticmethod
     def validate_clean_git_repository(source: str | Path) -> str:
-        """Require a standalone, clean Git root and return its immutable base commit."""
+        """Require a standalone, clean Git root and return its immutable base commit.
+
+        Git runs only against a sanitized copy of the metadata, so repository
+        helpers (fsmonitor, filters, hooks) never execute on the host.
+        """
+        from .snapshot import TrustedRepository
+
         source_path = Path(source).resolve(strict=True)
-        environment = {
-            "PATH": os.environ.get("PATH", ""),
-            "GIT_CONFIG_NOSYSTEM": "1",
-            "GIT_CONFIG_GLOBAL": os.devnull,
-            "GIT_CONFIG_COUNT": "0",
-        }
-        try:
-            root = subprocess.run(
-                ["git", "rev-parse", "--show-toplevel"],
-                cwd=source_path,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=environment,
-                timeout=10,
-            ).stdout.strip()
-            commit = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=source_path,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=environment,
-                timeout=10,
-            ).stdout.strip()
-            status = subprocess.run(
-                ["git", "status", "--porcelain=v1", "--untracked-files=all"],
-                cwd=source_path,
-                check=True,
-                capture_output=True,
-                text=True,
-                env=environment,
-                timeout=10,
-            ).stdout
-        except (OSError, subprocess.SubprocessError) as exc:
-            raise RepositoryError(f"workspace must be a valid Git repository: {exc}") from exc
-        if Path(root).resolve() != source_path:
-            raise RepositoryError("workspace must be the Git repository root")
-        if not re.fullmatch(r"[0-9a-fA-F]{40}", commit):
+        if not (source_path / ".git").is_dir() or (source_path / ".git").is_symlink():
+            raise RepositoryError("workspace must be a standalone Git repository root")
+        with TrustedRepository(source_path) as repository:
+            identity = repository.identity()
+        if identity.head_commit is None:
             raise RepositoryError("workspace HEAD is not a full Git commit")
-        if status:
+        if identity.dirty:
             raise RepositoryError("workspace must be clean before a coding-agent run")
-        if not (source_path / ".git").is_dir():
-            raise RepositoryError("workspace must be a standalone Git repository")
-        return commit
+        return identity.head_commit
 
     @staticmethod
     def isolated_copy(
@@ -268,6 +237,7 @@ class RepositoryManager:
                 )
         git_dir = target / ".git"
         if git_dir.exists():
+            shutil.rmtree(git_dir / "hooks", ignore_errors=True)
             if not git_dir.is_dir():
                 raise RepositoryError(
                     "workspace must contain a standalone Git repository, not a linked worktree"
@@ -285,42 +255,31 @@ class RepositoryManager:
     def snapshot(
         self, source: str, destination: str, commit: str | None = None
     ) -> RepositorySnapshot:
+        """Materialize a local repository at a pinned commit.
+
+        Remote sources are disabled until isolation for arbitrary remote code is
+        reviewed; clone them yourself into a trusted local directory first.
+        """
+        from .snapshot import TrustedRepository
+
+        if "://" in source or re.match(r"^[\w.-]+@[\w.-]+:", source) or source.startswith("ext:"):
+            raise RepositoryError("remote repository sources are disabled; use a local path")
+        if commit and not self._commit_pattern.fullmatch(commit):
+            raise RepositoryError("commit must be a hexadecimal Git object id")
         target = self.workspace_root / destination
         if target.exists():
             raise RepositoryError(f"destination already exists: {target}")
-        self._run(["git", "clone", "--no-checkout", source, str(target)], self.workspace_root)
-        resolved = commit or self._git(["rev-parse", "HEAD"], target)
-        if commit and not self._commit_pattern.fullmatch(commit):
-            raise RepositoryError("commit must be a hexadecimal Git object id")
-        self._run(["git", "checkout", "--detach", resolved], target)
-        license_name = self._find_license(target)
+        with TrustedRepository(source) as repository:
+            resolved = repository.resolve_commit(commit) if commit else repository.head_commit()
+            if resolved is None:
+                raise RepositoryError("repository has no commit to snapshot")
+            repository.materialize(resolved, target)
         return RepositorySnapshot(
             source=source,
             path=target,
-            commit=self._git(["rev-parse", "HEAD"], target),
-            license=license_name,
+            commit=resolved,
+            license=self._find_license(target),
         )
-
-    @staticmethod
-    def _run(command: list[str], cwd: Path) -> None:
-        try:
-            subprocess.run(
-                command, cwd=cwd, check=True, capture_output=True, text=True, timeout=120
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            detail = getattr(exc, "stderr", "") or str(exc)
-            raise RepositoryError(detail.strip()) from exc
-
-    @staticmethod
-    def _git(command: list[str], cwd: Path) -> str:
-        try:
-            result = subprocess.run(
-                ["git", *command], cwd=cwd, check=True, capture_output=True, text=True, timeout=30
-            )
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-            detail = getattr(exc, "stderr", "") or str(exc)
-            raise RepositoryError(detail.strip()) from exc
-        return result.stdout.strip()
 
     @staticmethod
     def _find_license(path: Path) -> str | None:

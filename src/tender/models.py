@@ -7,6 +7,8 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+from .integrity import IntegrityPolicy
+from .outcomes import EvaluationOutcome
 from .state import WorkflowState
 
 ISSUE_TITLE_MAX_CHARS = 1024
@@ -42,6 +44,8 @@ class FailureCategory(StrEnum):
     TEST = "test"
     TOOLING = "tooling"
     TIMEOUT = "timeout"
+    POLICY = "policy_rejection"
+    INTEGRITY = "integrity_violation"
     UNKNOWN = "unknown"
 
 
@@ -71,6 +75,11 @@ class BenchmarkConfig(BaseModel):
     commands: list[str] = Field(default_factory=lambda: ["pytest -q"], max_length=20)
     static_analysis_commands: list[str] = Field(default_factory=list, max_length=20)
     verification_commands: list[str] = Field(default_factory=list, max_length=20)
+    #: Independent regression checks, run in their own pristine verifier.
+    regression_commands: list[str] = Field(default_factory=list, max_length=20)
+    integrity: IntegrityPolicy = Field(default_factory=IntegrityPolicy)
+    #: Hard wall-clock budget for the whole workflow; None keeps per-command limits only.
+    deadline_seconds: int | None = Field(default=None, ge=1, le=86_400)
     require_human_approval: bool = False
     sandbox: SandboxBackend = SandboxBackend.LOCAL
     timeout_seconds: int = Field(default=120, ge=1, le=3600)
@@ -95,6 +104,8 @@ class EvaluationRun(BaseModel):
     test_output: str | None = None
     created_at: datetime = Field(default_factory=utcnow)
     metadata: dict[str, Any] = Field(default_factory=dict)
+    #: Separate evaluation properties for runs recorded by this version; None on legacy records.
+    outcome: EvaluationOutcome | None = None
 
 
 class RunEvent(BaseModel):

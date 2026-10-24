@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import shutil
 import subprocess
 import tempfile
 from collections import Counter
@@ -13,9 +12,11 @@ from time import monotonic
 from .artifacts import ArtifactStore
 from .experiments import BenchmarkTask, ExperimentManifest
 from .models import BenchmarkConfig, EvaluationRun, FailureCategory, RunEvent, RunStatus
+from .repository import RepositoryError
 from .runtime import provider_for
-from .sandbox import Sandbox
+from .sandbox import create_sandbox
 from .services import RunService
+from .snapshot import TrustedRepository
 from .store import RunStore
 from .workflow import PatchApplier
 
@@ -35,30 +36,44 @@ def verify_final_patch(
     setup_commands: tuple[str, ...],
     commands: tuple[str, ...],
     timeout_seconds: int,
+    *,
+    sandbox_backend: str = "local",
+    base_commit: str | None = None,
 ) -> tuple[bool, list[dict[str, object]]]:
-    """Run independent checks against a clean copy with the final agent patch applied."""
-    shutil.copytree(base_workspace, destination)
+    """Run independent checks in a fresh workspace materialized at the base commit.
+
+    The destination is created from Git objects (never a filesystem copy of a
+    possibly mutated directory), so earlier attempts cannot leak into it.
+    """
+    with TrustedRepository(base_workspace) as repository:
+        commit = base_commit or repository.head_commit()
+        if commit is None:
+            raise ValueError("verification base has no commit")
+        repository.materialize(commit, destination)
     PatchApplier().apply(destination, patch)
-    sandbox = Sandbox(destination, timeout_seconds=timeout_seconds)
+    sandbox = create_sandbox(destination, sandbox_backend, timeout_seconds)
     results: list[dict[str, object]] = []
     passed = True
-    for command in setup_commands + commands:
-        checked = sandbox.run(command)
-        result = {
-            "kind": "setup" if command in setup_commands else "verification",
-            "command": command,
-            "passed": checked.passed,
-            "timed_out": checked.timed_out,
-            "return_code": checked.return_code,
-            "duration_ms": checked.duration_ms,
-            "stdout": checked.stdout[-4000:],
-            "stderr": checked.stderr[-4000:],
-        }
-        results.append(result)
-        if not checked.passed:
-            passed = False
-            if checked.timed_out:
-                break
+    try:
+        for command in setup_commands + commands:
+            checked = sandbox.run(command)
+            result = {
+                "kind": "setup" if command in setup_commands else "verification",
+                "command": command,
+                "passed": checked.passed,
+                "timed_out": checked.timed_out,
+                "return_code": checked.return_code,
+                "duration_ms": checked.duration_ms,
+                "stdout": checked.stdout[-4000:],
+                "stderr": checked.stderr[-4000:],
+            }
+            results.append(result)
+            if not checked.passed:
+                passed = False
+                if checked.timed_out:
+                    break
+    finally:
+        sandbox.destroy()
     return passed, results
 
 
@@ -69,10 +84,8 @@ async def run_experiment(
     tasks = BenchmarkTask.load_jsonl(dataset_path)
     if not tasks:
         raise ValueError("benchmark dataset contains no tasks")
-    if manifest.sandbox != "local":
-        raise ValueError(
-            "benchmark runner currently supports only the local trusted-fixture sandbox"
-        )
+    if manifest.sandbox not in {"local", "docker"}:
+        raise ValueError("benchmark sandbox must be local (trusted fixtures only) or docker")
     dataset_root = Path.cwd()
     output_path = Path(output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -97,45 +110,19 @@ async def run_experiment(
                             raise ValueError(
                                 f"benchmark workspace does not exist: {task.workspace}"
                             )
-                        source_root = subprocess.run(
-                            ["git", "rev-parse", "--show-toplevel"],
-                            cwd=source_workspace,
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                        ).stdout.strip()
-                        if Path(source_root).resolve() != source_workspace.resolve():
-                            raise ValueError(
-                                f"task {task.task_id}: workspace must be the Git repository root"
+                        # All Git access goes through a sanitized metadata copy: no
+                        # fixture hooks, fsmonitor helpers, or filters run on the host.
+                        with TrustedRepository(source_workspace) as repository:
+                            if repository.identity().dirty:
+                                raise ValueError(
+                                    f"task {task.task_id}: source workspace must be clean "
+                                    "before benchmarking"
+                                )
+                            actual_commit = repository.resolve_commit(task.base_commit)
+                            workspace = repository.materialize(
+                                actual_commit, Path(temp_dir) / "repo"
                             )
-                        source_status = subprocess.run(
-                            ["git", "status", "--porcelain", "--untracked-files=all"],
-                            cwd=source_workspace,
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                        ).stdout
-                        if source_status.strip():
-                            raise ValueError(
-                                f"task {task.task_id}: source workspace must be clean "
-                                "before benchmarking"
-                            )
-                        workspace = Path(temp_dir) / "repo"
-                        shutil.copytree(source_workspace, workspace)
-                        subprocess.run(
-                            ["git", "checkout", "--detach", task.base_commit],
-                            cwd=workspace,
-                            check=True,
-                            capture_output=True,
-                        )
-                        actual_commit = subprocess.run(
-                            ["git", "rev-parse", "HEAD"],
-                            cwd=workspace,
-                            check=True,
-                            capture_output=True,
-                            text=True,
-                        ).stdout.strip()
-                        if actual_commit.lower() != task.base_commit.lower():
+                        if actual_commit != task.base_commit.lower():
                             raise ValueError(
                                 f"task {task.task_id}: checkout did not resolve to the pinned "
                                 "commit"
@@ -208,8 +195,15 @@ async def run_experiment(
                                             task.timeout_seconds,
                                             int(max(1, deadline - monotonic())),
                                         ),
+                                        sandbox_backend=manifest.sandbox,
+                                        base_commit=actual_commit,
                                     )
-                                except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                                except (
+                                    OSError,
+                                    ValueError,
+                                    RepositoryError,
+                                    subprocess.SubprocessError,
+                                ) as exc:
                                     passed = False
                                     verification_results.append(
                                         {
