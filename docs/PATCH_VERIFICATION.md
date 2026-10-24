@@ -74,7 +74,8 @@ command = "python3 -m mypy stats"   # a plain command: exit status only
 [integrity]
 hidden_tests = "hidden"          # directory beside the criteria file, outside the repository
 protected_paths = [".tender/**"] # touching these rejects the patch
-restored_paths = ["tests/**", "conftest.py", "**/conftest.py", "pytest.ini", "tox.ini", "setup.cfg", "pyproject.toml"]
+restored_paths = ["tests/**", "test/**", "conftest.py", "**/conftest.py", "pytest.ini", "pytest.toml", ".pytest.toml", "noxfile.py"]
+evaluator_sections = { "pyproject.toml" = "tool.pytest", "setup.cfg" = "tool:pytest", "tox.ini" = "pytest" }
 reject_tool_shadowing = true
 
 [constraints]
@@ -87,11 +88,22 @@ check_baseline = true
 python = "python3"
 ```
 
-**`pytest` checks are stronger than `command` checks.** Tender runs pytest with
-`-o addopts=`, writes a JUnit report, and requires every selector to match at
-least one test case, with all matched cases passed. A selector that matches
-nothing is `missing`, and the check fails even if the exit status was 0. A file
-selector lists any failing test cases by name.
+**`pytest` checks are stronger than `command` checks.** Selectors may name a
+file, a class, a function, or an exact parametrized test. Tender first runs
+`pytest --collect-only` on them to establish the expected test IDs, then runs
+them with `-o addopts=` and a JUnit report. Results are matched by full node ID,
+including class and parameter, so `TestA::test_x` never stands in for
+`TestB::test_x`. Every expected test must appear exactly once and pass. Missing,
+duplicated (ambiguous), skipped, or failed results fail the check, as do an
+empty, malformed, or inconsistent report, results for tests that were not
+selected, or a failed collection. This holds even if the exit status was 0.
+Failing tests are listed by ID.
+
+`evaluator_sections` names the test-runner section of mixed-purpose files.
+Only that section is reset to the base commit; the rest of the file is tested
+as the candidate wrote it, so application settings that live in
+`pyproject.toml` are evaluated honestly. If the section cannot be isolated
+exactly, the patch is rejected as an integrity violation.
 
 ## Reading the report
 

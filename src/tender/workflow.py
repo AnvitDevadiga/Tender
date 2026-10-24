@@ -17,6 +17,7 @@ from typing import Callable
 from .grader import Grade, TestGrader
 from .integrity import (
     EvaluatorAssets,
+    EvaluatorConfigError,
     IntegrityPolicy,
     check_patch_paths,
     restore_evaluator_paths,
@@ -850,10 +851,10 @@ class AgentWorkflow:
             outcome.timed_out = True
         records = {str(record.get("kind")): record for record in final.verification}
         integrity_record = records.get("integrity")
-        if integrity_record is not None:
-            outcome.integrity = "passed" if integrity_record.get("passed") else "violated"
-        elif reason.startswith("integrity_violation") or reason == "protected_files_modified":
+        if reason.startswith("integrity_violation") or reason == "protected_files_modified":
             outcome.integrity = "violated"
+        elif integrity_record is not None:
+            outcome.integrity = "passed" if integrity_record.get("passed") else "violated"
         for kind, attribute in (("target", "target"), ("regression", "regression")):
             record = records.get(kind)
             if record is None:
@@ -930,7 +931,9 @@ class AgentWorkflow:
             )
         records.append(target_record)
         if not target.passed:
-            if target.reason in {"environment_setup_failed", "timeout"}:
+            if target.reason in {"environment_setup_failed", "timeout"} or target.reason.startswith(
+                "integrity_violation"
+            ):
                 return target, records
             return Grade(False, target.results, "task_verification_failed"), records
         results = target.results
@@ -952,7 +955,9 @@ class AgentWorkflow:
             records.append(regression_record)
             results = (*results, *regression.results)
             if not regression.passed:
-                if regression.reason in {"environment_setup_failed", "timeout"}:
+                if regression.reason in {"environment_setup_failed", "timeout"} or (
+                    regression.reason.startswith("integrity_violation")
+                ):
                     return Grade(False, results, regression.reason), records
                 return Grade(False, results, "regression_verification_failed"), records
         return Grade(True, results, "task_verification_passed"), records
@@ -993,11 +998,19 @@ class AgentWorkflow:
                 record["passed"] = False
                 record["apply_error"] = str(exc)[:500]
                 return Grade(False, (), f"patch_error: {str(exc)[:300]}"), record
-            restored, removed = restore_evaluator_paths(
-                root, verifier.base_commit, patch.changed_files, integrity
-            )
+            try:
+                restored, removed, sections = restore_evaluator_paths(
+                    root, verifier.base_commit, patch.changed_files, integrity
+                )
+            except EvaluatorConfigError as exc:
+                # Fail closed: never test contents that differ from the patch in
+                # ways the integrity policy cannot account for.
+                record["passed"] = False
+                record["integrity_error"] = str(exc)[:500]
+                return Grade(False, (), f"integrity_violation: {str(exc)[:300]}"), record
             record["restored_from_base"] = list(restored)
             record["removed_patch_additions"] = list(removed)
+            record["evaluator_sections"] = list(sections)
             if assets is not None:
                 assets.install(root)
             sandbox = self._sandbox(root, backend, timeout_seconds)

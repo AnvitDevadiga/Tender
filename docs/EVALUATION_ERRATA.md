@@ -100,3 +100,26 @@ pass rates were computed over the newest 1,000 runs without saying so.
 **Fixed:** metrics are SQL aggregates over every run, and the response includes
 `coverage`. Provider failures are reported separately, together with a pass rate
 that excludes them.
+
+## 2026-10-24 (later) — patch-verification defects found at commit `259f0cc`
+
+### E10. JUnit results were matched by file and bare test name
+
+Structured pytest checks matched report entries using the file and the last
+name segment only. A class selector (`file::TestB`) matched nothing, so valid
+patches were rejected. A result for `TestA::test_required` could also count
+toward `TestB::test_required` whenever the latter produced no result.
+**Fixed:** expected tests come from `pytest --collect-only`. Results are matched
+by full node ID, including class and parameter, and every expected test must be
+reported exactly once as passed. The published demo reports used file and
+function selectors only, so their outcomes are unaffected.
+
+### E11. Whole-file restoration of mixed configuration files
+
+`pyproject.toml`, `setup.cfg`, and `tox.ini` were reset to the base commit as
+whole files. Application settings the candidate changed in them were therefore
+silently discarded. A patch that broke a runtime value could be accepted, and a
+valid configuration fix rejected, while the report still claimed independent
+verification. **Fixed:** only the test-runner section is reset, the rest is
+tested as submitted, and isolation failures are integrity violations. Neither
+published demo patch touched these files, so their outcomes are unaffected.

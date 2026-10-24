@@ -36,6 +36,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from .evidence import EvidenceWriter, environment_identity, sanitize, sanitize_text
 from .integrity import (
     EvaluatorAssets,
+    EvaluatorConfigError,
     IntegrityPolicy,
     check_patch_paths,
     restore_evaluator_paths,
@@ -53,6 +54,7 @@ from .snapshot import RepositoryBoundaryError, TrustedRepository, run_safe_git
 
 REPORT_SCHEMA = "tender.patch_report.v1"
 JUNIT_MARKER = "----TENDER-JUNIT-REPORT----"
+COLLECT_MARKER = "----TENDER-COLLECTED-TESTS----"
 _NODE_ID = re.compile(r"^[A-Za-z0-9_./\-]+(?:::[A-Za-z0-9_\[\]\-.,=: ]+)?$")
 
 
@@ -341,14 +343,23 @@ def validate_patch(
 
 
 def _check_command(spec: CheckSpec, python: str, nonce: str) -> tuple[str, str | None]:
+    """Shell command for one check.
+
+    Structured pytest checks first collect the selected test IDs (the expected
+    set), then run them with a JUnit report; both are echoed after markers so
+    they survive the sandbox boundary.
+    """
     if spec.command is not None:
         return spec.command, None
     report = f".tender-junit-{nonce}.xml"
+    collected = f".tender-collect-{nonce}.txt"
     selectors = " ".join(_shell_quote(node) for node in spec.pytest or [])
+    common = f"{python} -m pytest -p no:cacheprovider -o addopts="
     command = (
-        f"{python} -m pytest -q -p no:cacheprovider -o addopts= -o junit_family=xunit1 "
-        f"--junitxml={report} {selectors}; status=$?; echo '{JUNIT_MARKER}'; "
-        f"cat {report} 2>/dev/null; exit $status"
+        f"{common} --collect-only -q {selectors} > {collected} 2>&1; collect_status=$?; "
+        f"{common} -q -o junit_family=xunit1 --junitxml={report} {selectors}; status=$?; "
+        f"echo '{COLLECT_MARKER}'; echo \"$collect_status\"; cat {collected} 2>/dev/null; "
+        f"echo '{JUNIT_MARKER}'; cat {report} 2>/dev/null; exit $status"
     )
     return command, report
 
@@ -357,45 +368,139 @@ def _shell_quote(value: str) -> str:
     return "'" + value.replace("'", "'\"'\"'") + "'"
 
 
-def _parse_junit(stdout: str, selectors: list[str]) -> tuple[list[dict[str, str]], str]:
-    """Return per-selector outcomes and stdout without the embedded report."""
-    before, marker, after = stdout.partition(JUNIT_MARKER)
-    outcomes: list[dict[str, str]] = []
-    cases: list[tuple[str, str, str]] = []
-    if marker and after.strip():
-        try:
-            root = ElementTree.fromstring(after.strip())
-            for case in root.iter("testcase"):
-                status = "passed"
-                if case.find("failure") is not None or case.find("error") is not None:
-                    status = "failed"
-                elif case.find("skipped") is not None:
-                    status = "skipped"
-                cases.append((case.get("file", ""), case.get("name", ""), status))
-        except ElementTree.ParseError:
-            cases = []
-    for selector in selectors:
-        path, _, name = selector.partition("::")
-        matching = [
-            (case_name, status)
-            for file, case_name, status in cases
-            if file == path and (not name or case_name == name.split("::")[-1])
-        ]
-        matched = [status for _, status in matching]
-        failing = [f"{path}::{case}" for case, status in matching if status != "passed"]
-        if not matched:
-            outcome = "missing"
-        elif all(status == "passed" for status in matched):
-            outcome = "passed"
-        elif "failed" in matched:
-            outcome = "failed"
+_COLLECTED_ID = re.compile(r"^\S[^\n]*?\.py::\S.*$")
+
+
+def _selector_matches(node_id: str, selector: str) -> bool:
+    """Pytest selection semantics: file, class, function, or exact parametrized ID."""
+    return node_id == selector or node_id.startswith((selector + "::", selector + "["))
+
+
+def junit_node_ids(xml_text: str) -> tuple[list[tuple[str, str]], list[str]]:
+    """Rebuild full pytest node IDs from an xunit1 JUnit report.
+
+    pytest writes ``classname`` as the dotted module path plus any class names
+    and ``name`` as the function name with its parameter ID; ``file`` is the
+    test file. Returns ((node_id, status) ..., problems). A case whose class
+    name does not belong to its file is reported as inconsistent, not guessed.
+    """
+    problems: list[str] = []
+    cases: list[tuple[str, str]] = []
+    try:
+        root = ElementTree.fromstring(xml_text.strip())
+    except ElementTree.ParseError:
+        return [], ["JUnit report is not valid XML"]
+    if root.tag not in {"testsuites", "testsuite"}:
+        return [], ["JUnit report has an unexpected root element"]
+    for case in root.iter("testcase"):
+        file = case.get("file") or ""
+        classname = case.get("classname") or ""
+        name = case.get("name") or ""
+        if not file.endswith(".py") or not name:
+            problems.append(f"test case without file or name: {classname}.{name}")
+            continue
+        module = file[:-3].replace("/", ".")
+        if classname == module:
+            classes: list[str] = []
+        elif classname.startswith(module + "."):
+            classes = classname[len(module) + 1 :].split(".")
         else:
+            problems.append(f"test case {classname}::{name} does not belong to {file}")
+            continue
+        if case.find("failure") is not None or case.find("error") is not None:
+            status = "failed"
+        elif case.find("skipped") is not None:
+            status = "skipped"
+        else:
+            status = "passed"
+        cases.append(("::".join([file, *classes, name]), status))
+    return cases, problems
+
+
+def reconcile_pytest_results(
+    selectors: list[str],
+    collected_ids: list[str] | None,
+    collect_status: int | None,
+    junit_xml: str | None,
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Check every expected test ran exactly once and passed.
+
+    Expected tests come from collection, not from the report, so a result for
+    one test can never stand in for another (TestA.test_x for TestB.test_x).
+    Returns per-selector outcomes and check-level problems; any problem fails
+    the check.
+    """
+    problems: list[str] = []
+    if collected_ids is None:
+        problems.append("test collection output is missing")
+        collected_ids = []
+    elif collect_status != 0:
+        problems.append(f"test collection failed (exit {collect_status})")
+    cases: list[tuple[str, str]] = []
+    if junit_xml is None or not junit_xml.strip():
+        problems.append("no JUnit report was produced (the test process may have exited early)")
+    else:
+        cases, junit_problems = junit_node_ids(junit_xml)
+        problems.extend(junit_problems)
+        if not cases and not junit_problems:
+            problems.append("JUnit report contains no test cases")
+    results: dict[str, list[str]] = {}
+    for node_id, status in cases:
+        results.setdefault(node_id, []).append(status)
+    expected_all: set[str] = set()
+    outcomes: list[dict[str, str]] = []
+    for selector in selectors:
+        expected = sorted({node for node in collected_ids if _selector_matches(node, selector)})
+        expected_all.update(expected)
+        found = {node: results.get(node, []) for node in expected}
+        missing = [node for node, seen in found.items() if not seen]
+        duplicated = [node for node, seen in found.items() if len(seen) > 1]
+        failed = [node for node, seen in found.items() if seen == ["failed"]]
+        skipped = [node for node, seen in found.items() if seen == ["skipped"]]
+        if not expected or missing:
+            outcome = "missing"
+        elif duplicated:
+            outcome = "ambiguous"
+        elif failed:
+            outcome = "failed"
+        elif skipped:
             outcome = "skipped"
-        entry = {"id": selector, "outcome": outcome, "cases": str(len(matched))}
-        if name == "" and failing:
-            entry["failing_cases"] = ", ".join(failing[:20])
+        else:
+            outcome = "passed"
+        entry = {"id": selector, "outcome": outcome, "cases": str(len(expected))}
+        not_passed = missing + duplicated + failed + skipped
+        if not_passed and expected != [selector]:
+            entry["failing_cases"] = ", ".join(not_passed[:20])
         outcomes.append(entry)
-    return outcomes, before
+    unexpected = sorted(set(results) - expected_all)
+    if unexpected:
+        problems.append(
+            "JUnit report lists tests that were not selected: " + ", ".join(unexpected[:10])
+        )
+    return outcomes, problems
+
+
+def _parse_check_output(
+    stdout: str, selectors: list[str]
+) -> tuple[list[dict[str, str]], list[str], str]:
+    """Split sandbox output into (outcomes, problems, human-readable test output)."""
+    before, collect_marker, rest = stdout.partition(COLLECT_MARKER)
+    collected_text, junit_marker, junit_xml = rest.partition(JUNIT_MARKER)
+    collected_ids: list[str] | None = None
+    collect_status: int | None = None
+    if collect_marker:
+        lines = collected_text.strip("\n").splitlines()
+        if lines and lines[0].strip().lstrip("-").isdigit():
+            collect_status = int(lines[0].strip())
+            lines = lines[1:]
+        collected_ids = [line.rstrip() for line in lines if _COLLECTED_ID.match(line.rstrip())]
+    outcomes, problems = reconcile_pytest_results(
+        selectors,
+        collected_ids,
+        collect_status,
+        junit_xml if junit_marker else None,
+    )
+    return outcomes, problems, before
 
 
 def _run_group(
@@ -426,9 +531,21 @@ def _run_group(
             except RepositoryError as exc:
                 group.update(status="error", apply_error=str(exc)[:500])
                 return group
-            restored, removed = restore_evaluator_paths(root, base, changed, criteria.integrity)
+            try:
+                restored, removed, sections = restore_evaluator_paths(
+                    root, base, changed, criteria.integrity
+                )
+            except EvaluatorConfigError as exc:
+                group.update(status="error", integrity_error=str(exc)[:500])
+                return group
             group["restored_from_base"] = list(restored)
             group["removed_patch_additions"] = list(removed)
+            group["evaluator_sections"] = list(sections)
+            group["tested_as_submitted"] = not (
+                restored
+                or removed
+                or any(item["action"] == "restored_section" for item in sections)
+            )
         if assets is not None:
             assets.install(root)
         sandbox = create_sandbox(root, backend, criteria.constraints.timeout_seconds)
@@ -451,17 +568,21 @@ def _run_group(
                 )
                 record["executed"] = command
                 if report is not None:
-                    tests, stdout = _parse_junit(result.stdout, spec.pytest or [])
+                    tests, problems, stdout = _parse_check_output(result.stdout, spec.pytest or [])
                     record["tests"] = tests
                     record["stdout"] = sanitize_text(stdout[-4000:])
-                    missing = [test["id"] for test in tests if test["outcome"] == "missing"]
-                    if result.passed and (missing or not tests):
+                    if problems:
+                        record["report_problems"] = problems[:10]
+                    not_passed = [test for test in tests if test["outcome"] != "passed"]
+                    if problems or not_passed:
                         record["passed"] = False
-                        record["detail"] = "exit status 0 but the JUnit report does not list " + (
-                            ", ".join(missing) if missing else "the requested tests"
+                    if result.passed and (problems or not_passed):
+                        record["detail"] = "exit status 0, but " + (
+                            problems[0]
+                            if problems
+                            else "the results do not show every expected test passing: "
+                            + ", ".join(test["id"] for test in not_passed)
                         )
-                    elif any(test["outcome"] != "passed" for test in tests):
-                        record["passed"] = False
                 group["checks"].append(record)
                 timed_out = timed_out or result.timed_out
                 failed = failed or not record["passed"]
@@ -693,6 +814,8 @@ def evaluate_patch(
                 report["target"] = target
                 integrity["restored_from_base"] = target.get("restored_from_base", [])
                 integrity["removed_patch_additions"] = target.get("removed_patch_additions", [])
+                integrity["evaluator_sections"] = target.get("evaluator_sections", [])
+                integrity["tested_as_submitted"] = target.get("tested_as_submitted")
                 outcome.target = _group_outcome(target)
                 outcome.independently_verified = bool(
                     target.get("pristine") and target.get("status") == "passed"
@@ -725,6 +848,20 @@ def evaluate_patch(
                         "Regression preservation: no regression checks were configured."
                     )
                 outcome.environment = "ok"
+                config_errors = [
+                    group["integrity_error"]
+                    for group in (target, report.get("regression"))
+                    if group and group.get("integrity_error")
+                ]
+                if config_errors:
+                    # Contents other than the submitted patch would have been tested.
+                    outcome.integrity = "violated"
+                    outcome.independently_verified = False
+                    integrity["passed"] = False
+                    integrity["violations"].append(
+                        {"path": "(configuration)", "rule": "evaluator_settings_not_isolated"}
+                    )
+                    report["explanations"].append(f"Integrity: {config_errors[0]}")
                 for group in (report.get("baseline"), target, report.get("regression")):
                     if group and group.get("environment_failed"):
                         outcome.environment = "setup_failed"
@@ -802,6 +939,16 @@ def _explain(report: dict[str, Any]) -> list[str]:
         lines.append(
             "Evaluator-owned files changed by the patch were reset to the base commit for "
             f"verification: {', '.join(restored)}."
+        )
+    sections = [
+        f"[{item['section']}] in {item['path']}"
+        for item in report.get("integrity", {}).get("evaluator_sections", [])
+        if item.get("action") == "restored_section"
+    ]
+    if sections:
+        lines.append(
+            "Test-runner settings changed by the patch were reset to the base commit; the "
+            f"rest of each file was tested as submitted: {', '.join(sections)}."
         )
     return lines
 

@@ -72,10 +72,19 @@ configuration, and evidence integrity.
   components, and modules that would shadow the test tooling (`pytest.py`,
   `_pytest`, `sitecustomize.py`, `usercustomize.py`, `*.pth`, …) are integrity
   violations: the candidate is rejected and never verified.
-- `restored_paths` (defaults include `tests/**`, `conftest.py`, `pytest.ini`,
-  `tox.ini`, `setup.cfg`, `pyproject.toml`) are reset to base-commit content in
-  every verifier, and files the patch added there are removed. Restoring can
-  only cause a false rejection, never a false acceptance.
+- `restored_paths` (defaults: `tests/**`, `test/**`, `conftest.py`,
+  `**/conftest.py`, `pytest.ini`, `pytest.toml`, `.pytest.toml`, `noxfile.py`)
+  are pure evaluator files: they are reset to base-commit content in every
+  verifier, and files the patch added there are removed.
+- Mixed-purpose configuration files are not restored whole. Only their
+  test-runner section (`[tool.pytest*]` in `pyproject.toml`, `[tool:pytest]` in
+  `setup.cfg`, `[pytest]` in `tox.ini`) is reset; application and build
+  settings are tested exactly as submitted. The result is re-parsed and must
+  match the base section and the candidate's other values exactly. Otherwise, for
+  example with a non-standard form or a deleted file that held evaluator
+  settings, the run fails closed as an integrity violation and is not reported
+  as independently verified. Reports state whether the tested contents equal
+  the submitted patch (`tested_as_submitted`).
 - Hidden evaluator assets are read before any candidate runs, are never
   visible in the agent workspace, are written into verifiers after the patch,
   and are recorded by digest. Their output is withheld from agent feedback.
@@ -115,7 +124,9 @@ configuration, and evidence integrity.
   import time, or by locating and rewriting a report file) can still mislead a
   command-exit-code check. Restoring evaluator files and rejecting tool shadowing
   removes the common vectors; structured pytest checks in patch evaluation
-  additionally require a JUnit report listing each requested test as passed.
+  additionally reconcile collected test IDs with a JUnit report: every
+  expected test, identified by its full node ID, must be reported exactly once
+  as passed.
   Treat acceptance as strong evidence, not proof.
 - Docker isolation depends on a privileged host Docker daemon. The local Compose
   worker mounts the Docker socket, which is equivalent to host root.
