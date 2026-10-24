@@ -255,6 +255,10 @@ body {
   align-items: start;
 }
 
+.demo-panel {
+  min-width: 0; /* let the diff scroll inside its panel instead of widening the page */
+}
+
 .demo-panel h3 {
   font-size: 14px;
   margin: var(--s5) 0 var(--s2);

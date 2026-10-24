@@ -1070,16 +1070,22 @@ function renderOutcomes(run) {
     ["Policy", outcome.policy],
     ["Timeout", outcome.timed_out ? "error" : "ok"],
   ];
-  const note =
-    outcome.regression === "not_configured"
-      ? "No regression checks were configured, so regression preservation was not measured."
-      : outcome.overall === "accepted"
-        ? "All required checks passed in a fresh workspace at the base commit. A finite test suite cannot prove the absence of every regression."
-        : (outcome.reasons || []).join(" · ");
+  const reasons = (outcome.reasons || []).join(" · ");
+  let note = reasons;
+  if (outcome.failed_stage) {
+    note = `Stopped at the agent-side ${outcome.failed_stage.replaceAll("_", " ")} stage, before independent verification. ${reasons}`;
+  } else if (outcome.overall === "accepted") {
+    note =
+      outcome.regression === "not_configured"
+        ? "Target checks passed in a fresh workspace at the base commit. No regression checks were configured, so regression preservation was not measured."
+        : "All required checks passed in a fresh workspace at the base commit. A finite test suite cannot prove the absence of every regression.";
+  } else if (!reasons && outcome.target === "not_run") {
+    note = "Independent verification did not run.";
+  }
   return `<div class="verdict ${outcome.overall === "accepted" ? "accepted" : ""}">
       ${statusMark(outcome.overall)}
       ${outcome.independently_verified ? label("verified", "Target checks passed in a pristine verifier") : ""}
-      <span class="muted mono">verified at ${esc(short(outcome.verification_commit, 12))}</span>
+      <span class="muted mono">base ${esc(short(outcome.verification_commit, 12))}</span>
       ${note ? `<p>${esc(note)}</p>` : ""}
     </div>
     <div class="outcomes">${cells

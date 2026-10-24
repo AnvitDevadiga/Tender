@@ -422,6 +422,7 @@ pre {
 .status.inconclusive .mark,
 .status.not_run .mark,
 .status.not_configured .mark,
+.status.not_checked .mark,
 .status.unknown .mark {
   border-style: dashed;
   color: var(--text-3);
@@ -1040,6 +1041,13 @@ pre {
 .prose {
   max-width: var(--measure);
   color: var(--text-2);
+  overflow-wrap: anywhere; /* long test IDs and paths must not widen the page */
+}
+
+.callout,
+.check-head .what,
+.tests li span {
+  overflow-wrap: anywhere;
 }
 
 .facts {
